@@ -1,0 +1,37 @@
+# ===================================================
+# PIXEL IMAGE SEGMENTATION - Requirements
+# ===================================================
+# PyTorch + CUDA (install via pip with CUDA 12.6)
+# Run: pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cu126
+# ===================================================
+
+# --- Core ML / Deep Learning ---
+torch
+torchvision
+
+# --- Image Processing ---
+opencv-contrib-python
+Pillow
+
+# --- Data Science / Numerics ---
+numpy
+scipy
+pandas
+
+# --- Visualization ---
+matplotlib
+seaborn
+
+# --- ML Utilities ---
+tqdm
+scikit-learn
+
+# --- Segmentation Specific ---
+segmentation-models-pytorch
+albumentations
+
+# --- System Monitoring ---
+psutil
+
+# --- Experiment Tracking (optional but recommended) ---
+tensorboard

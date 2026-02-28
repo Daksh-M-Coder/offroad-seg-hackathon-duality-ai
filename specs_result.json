@@ -1,0 +1,30 @@
+{
+  "os": "Windows 10 (10.0.26200)",
+  "python_version": "3.11.9",
+  "python_path": "C:\\Users\\daksh\\Programmer\\Learning\\COMP TECH SKILL\\LOW CODE PROJECTS\\PIXEL IMG SEGMENTATION\\venv\\Scripts\\python.exe",
+  "architecture": "AMD64",
+  "cpu_processor": "Intel64 Family 6 Model 183 Stepping 1, GenuineIntel",
+  "cpu_logical_cores": 20,
+  "cpu_physical_cores": 14,
+  "cpu_max_freq_mhz": 2600,
+  "cpu_current_freq_mhz": 2600,
+  "ram_total_gb": 15.7,
+  "ram_available_gb": 1.8,
+  "ram_used_percent": 88.4,
+  "disks": [
+    {
+      "drive": "C:\\",
+      "fs": "NTFS",
+      "total_gb": 929.6,
+      "free_gb": 147.3,
+      "used_pct": 84.2
+    }
+  ],
+  "nvidia_gpus": [
+    {
+      "name": "NVIDIA GeForce RTX 3050 6GB Laptop GPU",
+      "vram_mib": "6144",
+      "driver": "591.86"
+    }
+  ]
+}
