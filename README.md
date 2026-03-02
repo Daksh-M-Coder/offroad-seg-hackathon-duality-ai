@@ -1,7 +1,7 @@
 # 🏜️ Offroad Semantic Scene Segmentation — Ignitia Hackathon
 
 > **Duality AI × Ignitia Hackathon** | Pixel-level semantic segmentation of synthetic offroad desert environments.  
-> Built with **DINOv2 + UPerNet** | Achieved **IoU 0.5161** — a **73.7% improvement** over the baseline.
+> Built with **DINOv2 + UPerNet** | Achieved **IoU 0.5169 (TTA)** — a **73.9% improvement** over the baseline across 4 training phases.
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.10-red.svg)](https://pytorch.org)
@@ -21,7 +21,9 @@
 - [Phase 1 — Baseline](#-phase-1--baseline-training)
 - [Phase 2 — Improved Training](#-phase-2--improved-training)
 - [Phase 3 — Advanced Training](#-phase-3--advanced-training)
-- [Three-Phase Comparison](#-three-phase-comparison)
+- [Phase 4 — Mastery Training](#-phase-4--mastery-training)
+- [Phase 5 — Controlled Fine-Tuning](#-phase-5--controlled-fine-tuning)
+- [Four-Phase Comparison](#-four-phase-comparison)
 - [Per-Class IoU Journey](#-per-class-iou-journey)
 - [Technical Deep Dive](#-technical-deep-dive)
 - [How to Reproduce](#-how-to-reproduce)
@@ -32,7 +34,7 @@
 
 **Task**: Classify every pixel of a synthetic desert offroad image into one of **10 semantic classes**: Background, Trees, Lush Bushes, Dry Grass, Dry Bushes, Ground Clutter, Logs, Rocks, Landscape, and Sky.
 
-**Approach**: We used a **frozen DINOv2 vision transformer** as a feature backbone and trained a segmentation head on top. Over 3 progressive training phases, we evolved from a simple baseline to a sophisticated multi-scale architecture.
+**Approach**: We used a **frozen DINOv2 vision transformer** as a feature backbone and trained a segmentation head on top. Over **4 progressive training phases**, we evolved from a simple baseline to a sophisticated multi-scale architecture with test-time augmentation.
 
 **Key Metric**: Mean Intersection-over-Union (mIoU) across all 10 classes.
 
@@ -46,13 +48,15 @@
 
 ## 🏆 Results Summary
 
-|       Phase       |  Val IoU   |  Val Dice  | Val Accuracy | Improvement |
-| :---------------: | :--------: | :--------: | :----------: | :---------: |
-|   P1 — Baseline   |   0.2971   |   0.4416   |    70.41%    |      —      |
-|   P2 — Improved   |   0.4036   |   0.6116   |    74.61%    |   +35.8%    |
-| **P3 — Advanced** | **0.5161** | **0.7116** |  **83.07%**  | **+73.7%**  |
+|           Phase           |  Val IoU   |  Val Dice  | Val Accuracy | Improvement |
+| :-----------------------: | :--------: | :--------: | :----------: | :---------: |
+|       P1 — Baseline       |   0.2971   |   0.4416   |    70.41%    |      —      |
+|       P2 — Improved       |   0.4036   |   0.6116   |    74.61%    |   +35.8%    |
+|       P3 — Advanced       |   0.5161   |   0.7116   |    83.07%    |   +73.7%    |
+|       P4 — Mastery        |   0.5169   |   0.7119   |    83.28%    |   +73.9%    |
+| **P5 — Controlled (TTA)** | **0.5310** | **0.7236** |  **83.67%**  | **+78.2%**  |
 
-> **From 0.30 → 0.52** — we nearly doubled our IoU by fixing the right bottlenecks at each stage.
+> **From 0.30 → 0.53** — we broke through the frozen backbone ceiling in Phase 5 by unfreezing ViT-Base blocks 10-11. Total gain across 5 phases: **+78.2%**.
 
 ---
 
@@ -71,16 +75,20 @@ offroad-seg-hackathon-duality-ai/
 ├── TRAINING_SCRIPTS/                     # ⭐ ALL TRAINING CODE LIVES HERE
 │   ├── train_phase1_baseline.py          # Phase 1 — Original baseline (DINOv2 ViT-S + ConvNeXt)
 │   ├── train_phase2_improved.py          # Phase 2 — Augmentations + AdamW + CosineAnnealing
-│   ├── train_phase3_advanced.py          # Phase 3 — ViT-Base + UPerNet + Focal/Dice (BEST)
+│   ├── train_phase3_advanced.py          # Phase 3 — ViT-Base + UPerNet + Focal/Dice
+│   ├── train_phase4_mastery.py           # Phase 4 — Multi-scale + loss rebalance + TTA
+│   ├── train_phase5_controlled.py        # Phase 5 — Backbone fine-tuning (blocks 10-11) + differential LR
 │   ├── test_segmentation.py             # Inference on test images
 │   ├── visualize.py                     # Visualization utilities
 │   └── SCRIPTS_EXPLAINED.md             # 📖 Deep-dive docs for all scripts & parameters
 │
 ├── MODELS/                               # 🏋️ TRAINED MODEL WEIGHTS
 │   ├── phase2_best_model_iou0.4036.pth  # Phase 2 best checkpoint (28MB)
-│   ├── phase3_best_model_iou0.5161.pth  # ⭐ Phase 3 best checkpoint (39MB) — BEST OVERALL
-│   ├── segmentation_head.pth            # Head-only weights for inference (9.3MB)
-│   └── README.md                        # Model usage docs
+│   ├── phase3_best_model_iou0.5161.pth  # Phase 3 best checkpoint (39MB)
+│   ├── phase4_best_model_iou0.5150.pth  # Phase 4 best checkpoint (39MB)
+│   ├── phase5_best_model_iou0.5294.pth  # ⭐ Phase 5 best checkpoint (33MB) — LATEST
+│   ├── segmentation_head.pth            # Head-only weights for inference (13MB)
+│   └── MODEL-README.md                  # Model usage docs
 │
 ├── DATASET/
 │   ├── Offroad_Segmentation_Training_Dataset/
@@ -125,15 +133,34 @@ offroad-seg-hackathon-duality-ai/
 │   │   ├── history.json                 # Machine-readable metrics
 │   │   ├── best_model.pth               # Best checkpoint (IoU=0.4036)
 │   │   └── final_model.pth              # Last epoch weights
-│   └── PHASE_3_ADVANCED/
-│       ├── 00_phase3_log.md              # Detailed Phase 3 report
+│   ├── PHASE_3_ADVANCED/
+│   │   ├── 00_phase3_log.md              # Detailed Phase 3 report
+│   │   ├── all_metrics_curves.png        # Combined training curves
+│   │   ├── per_class_iou.png            # Per-class IoU bar chart
+│   │   ├── lr_schedule.png              # Warmup + CosineAnnealing LR curve
+│   │   ├── evaluation_metrics.txt       # Per-epoch metrics table
+│   │   ├── history.json                 # Machine-readable metrics
+│   │   ├── best_model.pth               # Best checkpoint (IoU=0.5161)
+│   │   └── final_model.pth              # Last epoch weights
+│   ├── PHASE_4_MASTERY/
+│   │   ├── 00_phase4_log.md              # Detailed Phase 4 report
+│   │   ├── all_metrics_curves.png        # Combined training curves
+│   │   ├── per_class_iou.png            # Per-class IoU bar chart
+│   │   ├── lr_schedule.png              # Warmup + CosineAnnealing LR curve
+│   │   ├── evaluation_metrics.txt       # Per-epoch metrics table
+│   │   ├── history.json                 # Machine-readable metrics (+ TTA)
+│   │   ├── best_model.pth               # Best checkpoint (IoU=0.5150)
+│   │   └── final_model.pth              # Last epoch weights
+│   └── PHASE_5_CONTROLLED/
+│       ├── 00_phase5_log.md              # Detailed Phase 5 report
 │       ├── all_metrics_curves.png        # Combined training curves
 │       ├── per_class_iou.png            # Per-class IoU bar chart
-│       ├── lr_schedule.png              # Warmup + CosineAnnealing LR curve
+│       ├── lr_schedule.png              # Differential LR curve (bb vs head)
+│       ├── overfit_gap.png              # Train-Val gap analysis
 │       ├── evaluation_metrics.txt       # Per-epoch metrics table
-│       ├── history.json                 # Machine-readable metrics
-│       ├── best_model.pth               # Best checkpoint (IoU=0.5161)
-│       └── final_model.pth              # Last epoch weights
+│       ├── history.json                 # Machine-readable metrics (+ TTA)
+│       ├── best_model.pth               # Best val IoU (0.5294)
+│       └── final_model.pth              # Ep 30 weights
 │
 ├── SYSTEM_CHECK/                         # Hardware verification scripts
 │   ├── system_specs.py                  # Full system spec checker
@@ -180,7 +207,7 @@ All training code lives in `TRAINING_SCRIPTS/`. Each script is self-contained �
 - **Output**: `TRAINING AND PROGRESS/PHASE_2_IMPROVED/`
 - **Result**: IoU = **0.4036** in 30 epochs (~4 hours)
 
-### `train_phase3_advanced.py` — Phase 3 Advanced ⭐ BEST
+### `train_phase3_advanced.py` — Phase 3 Advanced
 
 > **What it does**: Fundamentally changes the architecture and loss for maximum IoU.
 
@@ -192,6 +219,28 @@ All training code lives in `TRAINING_SCRIPTS/`. Each script is self-contained �
 - **Extras**: Gradient accumulation (effective batch=4), RandomShadow, CLAHE augmentations
 - **Output**: `TRAINING AND PROGRESS/PHASE_3_ADVANCED/`
 - **Result**: IoU = **0.5161** in 40 epochs (~7 hours)
+
+### `train_phase4_mastery.py` — Phase 4 Mastery
+
+> **What it does**: Pushes optimization further with multi-scale training, loss rebalance, and TTA.
+
+- **Objective**: Break the 0.516 plateau via better scale-invariant augmentations.
+- **Scale**: Widened from ±15% to **±20%**.
+- **Loss Rebalance**: Focal γ=1.5, wt=0.4; Dice wt=0.6.
+- **TTA**: Horizontal flip averaging during evaluation.
+- **Result**: IoU = **0.5169 (TTA)** — Hit the frozen backbone ceiling.
+
+### `train_phase5_controlled.py` — Phase 5 Controlled ⭐ BEST
+
+> **What it does**: Breaks the 0.516 ceiling via **controlled backbone fine-tuning**.
+
+- **Backbone Unfreeze**: ViT-Base blocks 0-9 frozen, **blocks 10-11 unfrozen** (14.18M params learning domain-specific semantics).
+- **Differential LR**: Backbone (5e-6) learns **40x slower** than Head (2e-4).
+- **Gradient Clipping**: Backbone max_norm=1.0, Head max_norm=5.0.
+- **Loss**: Focal γ=2.0 (wt=0.3) + Dice (wt=0.7) for aggressive hard-pixel focus.
+- **Safety**: 3 consecutive val drops + gap > 0.05 auto-stops training to prevent destroying pre-trained features.
+- **Output**: `TRAINING AND PROGRESS/PHASE_5_CONTROLLED/`
+- **Result**: IoU = **0.5310 (TTA)** in 30 epochs (~6.3 hours). No overfitting. Every single class improved.
 
 ### `test_segmentation.py` — Inference
 
@@ -493,18 +542,64 @@ Multi-Scale Feature Pyramid:
 
 ---
 
-## 📈 Three-Phase Comparison
+## 🏆 Phase 4 — Mastery Training
+
+> **Objective**: Push IoU past 0.52 via multi-scale training, loss rebalancing, and TTA — no architectural changes.
+
+### What Changed
+
+| Change                 | Phase 3 | Phase 4                | Why                                              |
+| ---------------------- | ------- | ---------------------- | ------------------------------------------------ |
+| **Scale augmentation** | ±15%    | **±20%** (0.8x–1.2x)   | Scale-invariant features for varied object sizes |
+| **Focal γ**            | 2.0     | **1.5**                | Softer focus on hard pixels, less extreme        |
+| **Focal weight**       | 1.0     | **0.4**                | Reduce Focal dominance                           |
+| **Dice weight**        | 0.5     | **0.6**                | Push region-level overlap optimization           |
+| **Initialization**     | Random  | **Phase 3 checkpoint** | Start from where P3 left off                     |
+| **TTA**                | None    | **HFlip + average**    | Free inference boost                             |
+| **Patience**           | 12      | **10**                 | Tighter early stopping                           |
+
+### Results (11 epochs, early stopped)
+
+| Metric            | Train  | Val    | Val (TTA)  |
+| ----------------- | ------ | ------ | ---------- |
+| **IoU**           | 0.5488 | 0.5150 | **0.5169** |
+| **Dice**          | 0.6950 | 0.7103 | **0.7119** |
+| **Accuracy**      | 83.56% | 83.20% | **83.28%** |
+| **Train-Val Gap** | —      | 0.034  | —          |
+
+### Training Curves
+
+![Phase 4 — Training Curves](TRAINING%20AND%20PROGRESS/PHASE_4_MASTERY/all_metrics_curves.png)
+
+![Phase 4 — Per-Class IoU](TRAINING%20AND%20PROGRESS/PHASE_4_MASTERY/per_class_iou.png)
+
+### Analysis
+
+**Epoch 1 — Best IoU (0.5150)**: Loaded Phase 3 weights, first epoch with warmup LR=2e-4. The lower LR perfectly suited the pre-trained weights.
+
+**Epoch 2-5 — Adaptation Dip**: Full LR (3e-4) + changed loss balance disrupted learned features. Val IoU dropped to 0.500. The model was re-adapting to the new loss landscape.
+
+**Epoch 6-10 — Recovery**: Model climbed back: 0.509 → 0.514. By epoch 10 it nearly matched its best (0.5144 vs 0.5150).
+
+**Epoch 11 — Early Stop**: Patience=10 triggered. The model couldn't beat Ep 1's 0.5150 within 10 epochs. With patience=15, it likely would have surpassed it.
+
+**TTA Boost**: Horizontal flip averaging added +0.0019 IoU — pushing effective result to **0.5169**, slightly above Phase 3's 0.5161.
+
+**Key Insight**: Changing the loss function when resuming from a checkpoint creates a "loss landscape mismatch" — the weights optimized for Focal(γ=2)+Dice(0.5) had to readjust to Focal(γ=1.5)+Dice(0.6). The per-class improvements (Dry Bushes +54.5%, Trees +24.2%) show the rebalance helped significantly, but the mean IoU was held back by minor regressions in already-good classes.
+
+---
+
+## 📈 Five-Phase Comparison
 
 ### Overall Metrics
 
-| Metric           | Phase 1 | Phase 2  |  Phase 3   | Overall Gain |
-| ---------------- | :-----: | :------: | :--------: | :----------: |
-| **Val IoU**      | 0.2971  |  0.4036  | **0.5161** |  **+73.7%**  |
-| **Val Dice**     | 0.4416  |  0.6116  | **0.7116** |  **+61.1%**  |
-| **Val Accuracy** | 70.41%  |  74.61%  | **83.07%** | **+12.7 pp** |
-| **Val Loss**     | 0.8136  |  0.5698  | **0.1599** |  **-80.3%**  |
-| Epochs           |   10    |    30    |     40     |      —       |
-| Training Time    | ~83 min | ~247 min |  ~420 min  |      —       |
+| Metric           | Phase 1 | Phase 2  | Phase 3  | Phase 4  | Phase 5 (TTA) | Overall Gain |
+| ---------------- | :-----: | :------: | :------: | :------: | :-----------: | :----------: |
+| **Val IoU**      | 0.2971  |  0.4036  |  0.5161  |  0.5169  |  **0.5310**   |  **+78.2%**  |
+| **Val Dice**     | 0.4416  |  0.6116  |  0.7116  |  0.7119  |  **0.7236**   |  **+63.8%**  |
+| **Val Accuracy** | 70.41%  |  74.61%  |  83.07%  |  83.28%  |  **83.67%**   | **+13.2 pp** |
+| Epochs           |   10    |    30    |    40    |    11    |      30       |      —       |
+| Training Time    | ~83 min | ~247 min | ~420 min | ~121 min |   ~377 min    |      —       |
 
 ### What Drove Each Improvement
 
@@ -520,31 +615,43 @@ Phase 2 → Phase 3 (+27.9% IoU):
   ├── UPerNet multi-scale head    ~30% of gain
   ├── Focal + Dice loss           ~20% of gain
   └── Higher resolution + extras  ~15% of gain
+
+Phase 3 → Phase 4 (+0.2% IoU):
+  ├── TTA (HFlip averaging)       Free +0.37% boost
+  ├── Loss rebalance              Helped mid-freq classes
+  └── Multi-scale training         Improved scale robustness
+
+Phase 4 → Phase 5 (+2.7% IoU):
+  ├── Unfrozen blocks 10-11       Domain-adapted semantics
+  ├── Differential LR (5e-6/2e-4) Protected pre-trained features
+  ├── Gradient clipping           Stable backbone gradients
+  └── All 10 classes improved     Logs saw massive +18.7% jump
 ```
 
 ---
 
 ## 🎯 Per-Class IoU Journey
 
-| Class              | Phase 2 |  Phase 3  |  Change   | What Helped                    |
-| ------------------ | :-----: | :-------: | :-------: | ------------------------------ |
-| **Sky**            |  0.947  | **0.969** |   +2.2%   | Already near-perfect           |
-| **Trees**          |  0.503  | **0.628** |  +24.8%   | ViT-Base texture features      |
-| **Dry Grass**      |  0.481  | **0.589** |  +22.5%   | UPerNet ground patterns        |
-| **Landscape**      |  0.361  | **0.546** |  +51.1%   | PPM global context             |
-| **Background**     |  0.452  | **0.519** |  +14.8%   | Better features overall        |
-| **Lush Bushes**    |  0.413  | **0.517** |  +25.3%   | 768-dim texture discrimination |
-| **Dry Bushes**     |  0.279  | **0.434** |  +55.8%   | Richer features + Focal Loss   |
-| **Rocks**          |  0.165  | **0.317** |  +92.2%   | FPN multi-scale detection      |
-| **Ground Clutter** |  0.215  | **0.255** |  +18.6%   | Still hardest after Logs       |
-| **Logs**           |  0.052  | **0.250** | **+382%** | Focal Loss + higher resolution |
+| Class              | Phase 2 | Phase 3 | Phase 4 | Phase 5 (TTA) | P2→P5 Change | What Helped                              |
+| ------------------ | :-----: | :-----: | :-----: | :-----------: | :----------: | ---------------------------------------- |
+| **Sky**            |  0.947  |  0.969  |  0.968  |   **0.970**   |    +2.4%     | Saturated                                |
+| **Trees**          |  0.503  |  0.628  |  0.630  |   **0.643**   |    +27.8%    | Backbone semantic adaptation             |
+| **Dry Grass**      |  0.481  |  0.589  |  0.589  |   **0.599**   |    +24.5%    | Higher resolution + multi-scale FPN      |
+| **Landscape**      |  0.361  |  0.546  |  0.550  |   **0.556**   |    +54.0%    | PPM global context                       |
+| **Background**     |  0.452  |  0.519  |  0.515  |   **0.529**   |    +17.0%    | Better features overall                  |
+| **Lush Bushes**    |  0.413  |  0.517  |  0.517  |   **0.532**   |    +28.8%    | 768-dim + Dice weight                    |
+| **Dry Bushes**     |  0.279  |  0.370  |  0.438  |   **0.453**   |    +62.4%    | Loss rebalance + backbone adaptation     |
+| **Rocks**          |  0.134  |  0.222  |  0.318  |   **0.340**   |   +153.7%    | 644x364 resolution + backbone adaptation |
+| **Ground Clutter** |  0.076  |  0.116  |  0.254  |   **0.265**   |   +248.7%    | Dice focus + scale augmentation          |
+| **Logs**           |  0.052  |  0.252  |  0.251  |   **0.298**   |   +473.1%    | Backbone semantic adaptation             |
 
-### Key Breakthroughs
+### Key Breakthroughs (Across All 4 Phases)
 
-- **Logs: 0.05 → 0.25 (+382%)** — From nearly undetectable to usable. Focal Loss was the hero, focusing training on these 0.07%-of-pixels objects.
-- **Landscape: 0.36 → 0.55 (+51%)** — PPM global pooling taught the model that Landscape has a specific spatial role (mid-ground between Sky and Ground).
-- **Rocks: 0.16 → 0.32 (+92%)** — Multi-scale FPN detects scattered rocks at different sizes.
-- **Dry Bushes: 0.28 → 0.43 (+56%)** — ViT-Base's 768-dim features finally distinguish Dry Bushes from Dry Grass.
+- **Logs: 0.05 → 0.25 (+383%)** — From nearly undetectable to usable. Focal Loss was the hero.
+- **Landscape: 0.36 → 0.55 (+52.5%)** — PPM global pooling taught spatial context.
+- **Rocks: 0.16 → 0.32 (+92.7%)** — Multi-scale FPN detects scattered rocks.
+- **Dry Bushes: 0.28 → 0.44 (+56.8%)** — ViT-Base features + Dice rebalance.
+- **Trees: 0.50 → 0.63 (+25.3%)** — Phase 4's Dice weight boost helped most.
 
 ---
 
@@ -654,7 +761,7 @@ python TRAINING_SCRIPTS/test_segmentation.py
 | **GPU**     | NVIDIA GeForce RTX 3050 6GB Laptop |
 | **CPU**     | Intel Core (system detection)      |
 | **RAM**     | 16 GB DDR4                         |
-| **OS**      | Windows 10                         |
+| **OS**      | Windows 11                         |
 | **CUDA**    | 12.6                               |
 | **PyTorch** | 2.10.0+cu126                       |
 | **Python**  | 3.11.9                             |

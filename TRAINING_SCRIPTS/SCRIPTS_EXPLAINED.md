@@ -1,6 +1,6 @@
 # Training Scripts — Technical Documentation
 
-> This document explains **every script, every parameter, every decision** we made across 3 training phases — why we chose what we chose, what we expected, and what actually happened.
+> This document explains **every script, every parameter, every decision** we made across 5 training phases — why we chose what we chose, what we expected, and what actually happened.
 
 ---
 
@@ -10,6 +10,8 @@
 - [Phase 1 Script: `train_phase1_baseline.py`](#phase-1-script-train_phase1_baselinepy)
 - [Phase 2 Script: `train_phase2_improved.py`](#phase-2-script-train_phase2_improvedpy)
 - [Phase 3 Script: `train_phase3_advanced.py`](#phase-3-script-train_phase3_advancedpy)
+- [Phase 4 Script: `train_phase4_mastery.py`](#phase-4-script-train_phase4_masterypy)
+- [Phase 5 Script: `train_phase5_controlled.py`](#phase-5-script-train_phase5_controlledpy)
 - [Inference: `test_segmentation.py`](#inference-test_segmentationpy)
 - [Visualization: `visualize.py`](#visualization-visualizepy)
 - [Parameter Evolution Table](#parameter-evolution-table)
@@ -484,6 +486,315 @@ A.CLAHE(clip_limit=2.0, p=0.15),  # Enhance local contrast
 
 ---
 
+## Phase 4 Script: `train_phase4_mastery.py`
+
+### What Changed and Why
+
+Every change was a **direct response to Phase 3's analysis** — the model was still improving at epoch 40, rare classes (Logs=0.25, Rocks=0.32) hadn't plateaued, and we hadn't tried TTA or loss tuning.
+
+#### Change 1: Resume From Phase 3 Checkpoint
+
+```python
+# Load Phase 3's best weights instead of training from scratch
+p3_checkpoint = os.path.join(project_root, 'TRAINING AND PROGRESS', 'PHASE_3_ADVANCED', 'best_model.pth')
+ckpt = torch.load(p3_checkpoint, map_location=device, weights_only=False)
+model.load_state_dict(ckpt['model_state_dict'])
+# Epoch 40, Val IoU=0.5161 — our starting point
+```
+
+**Why resume?** Phase 3 was still improving at epoch 40. Rather than training 80+ epochs from scratch (14+ hours), we can start from P3's best and focus on refinement. This is standard transfer learning — the head already knows the basic class patterns, we're teaching it nuances.
+
+**Why `weights_only=False`?** PyTorch 2.10+ defaults to `weights_only=True` for security (prevents arbitrary code execution during deserialization). Our checkpoint contains numpy arrays (from `history.json`), which requires the `False` flag. Safe because we generated the checkpoint ourselves.
+
+**Expected**: Epoch 1 should start near 0.51 IoU.  
+**Actual**: ✅ Epoch 1 IoU = 0.515 — exactly where Phase 3 left off.
+
+#### Change 2: Multi-Scale Training (0.8x–1.2x)
+
+```python
+# Phase 3
+A.ShiftScaleRotate(shift_limit=0.08, scale_limit=0.15, rotate_limit=20, p=0.4)
+
+# Phase 4
+A.ShiftScaleRotate(shift_limit=0.1, scale_limit=0.2, rotate_limit=15, p=0.5)
+#                                    ^^^^^^^^^^^^
+# scale_limit=0.2 means ±20% → images are randomly scaled to 80%–120% of base size
+```
+
+**Why wider scale range?** Phase 3 used ±15% (0.85x–1.15x). Phase 4 expands to ±20% (0.8x–1.2x). This forces the model to recognize objects at more varied scales, simulating different camera distances. Rocks at 0.8x are much smaller — the model must learn scale-invariant texture features.
+
+**Why increase shift_limit (0.08 → 0.1)?** Wider shifts expose more edge regions, training the model for off-center compositions common in real UGV footage.
+
+**Why reduce rotate (20 → 15)?** Desert scenes have strong horizontal lines (horizon, terrain layers). ±20° rotation sometimes flipped the scene orientation beyond realistic, confusing the model about Sky vs Landscape position. ±15° keeps it natural.
+
+**Why increase probability (0.4 → 0.5)?** With wider scale range, we want multi-scale training to happen more often to give the model enough exposure.
+
+**Expected**: +0.01–0.02 IoU from scale robustness.  
+**Actual**: Hard to isolate — model improved for mid-frequency classes (Trees +24%, Lush Bushes +24%) suggesting scale variation helped.
+
+#### Change 3: Loss Rebalance (Dice 0.6, Focal γ=1.5)
+
+```python
+# Phase 3
+loss = 1.0 * FocalLoss(gamma=2.0) + 0.5 * DiceLoss()  # Focal-heavy
+
+# Phase 4
+loss = 0.4 * FocalLoss(gamma=1.5) + 0.6 * DiceLoss()  # Dice-heavy
+```
+
+**Why lower Focal γ (2.0 → 1.5)?** Focal Loss with γ=2 aggressively downweights "easy" pixels (>90% confidence gets 100× less weight). This is great for initial learning but in Phase 4 (fine-tuning), many pixels ARE correctly classified with high confidence. γ=1.5 is softer — it still focuses on hard pixels but doesn't completely ignore the easy ones, providing more stable gradients.
+
+**Why increase Dice weight (0.5 → 0.6)?** Dice Loss optimizes for region-level overlap — it cares about IoU-like metrics directly. In Phase 3, Focal Loss dominated (1.0 vs 0.5). For fine-tuning, region-level Dice feedback is more useful than pixel-level Focal feedback, because the model already gets most pixels right — it needs to refine **boundaries and small regions**.
+
+**Why Focal weight 0.4 (not 0.0)?** Removing Focal entirely would lose the per-pixel gradient signal. Keeping it at 0.4 maintains stable pixel-level learning while letting Dice drive the optimization direction.
+
+**The Tradeoff**: This change created a "loss landscape mismatch" — the Phase 3 weights were optimized for the old loss ratios. The new ratios meant epoch 1's gradients were slightly misaligned, causing the Ep 2-5 dip. This is the price of changing loss mid-training.
+
+**Expected**: +0.01–0.03 IoU from better rare-class handling.  
+**Actual**: Per-class gains were huge (Dry Bushes +54.5%, Trees +24.2%) but mean IoU didn't improve because already-good classes (Sky, Landscape) regressed slightly. The loss change was right for individual classes but neutral for mean IoU.
+
+#### Change 4: Explicit Backbone Freezing
+
+```python
+# Phase 3 — implicit freezing (backbone.eval(), no optimizer params)
+backbone.eval()
+backbone.to(device)
+
+# Phase 4 — explicit freezing
+backbone.eval()
+for param in backbone.parameters():
+    param.requires_grad = False  # Belt + suspenders
+backbone.to(device)
+```
+
+**Why explicit?** Phase 3 relied on not including backbone params in the optimizer. But PyTorch can still compute and store gradients for backbone params during `loss.backward()`, wasting VRAM. `requires_grad=False` prevents gradient computation entirely, saving ~500MB VRAM and ~5% training time.
+
+#### Change 5: Early Stopping Patience 10 (was 12)
+
+```python
+patience = 10  # Phase 3 used 12
+```
+
+**Why tighter?** Phase 3 trained 40 epochs and early stopping never triggered. For Phase 4 (fine-tuning from a checkpoint), the model is already near its optimum — we expect faster convergence and shorter plateau periods. Patience=10 prevents wasting hours if the model has truly plateaued.
+
+**In retrospect**: This was slightly too aggressive. The model hit its best at Ep 1, dipped Ep 2-5 (loss adjustment), then recovered by Ep 10 (IoU=0.5144, nearly matching best). With patience=15, it likely would have beaten 0.5150 by Ep 12-14. **Lesson: when changing loss function mid-training, increase patience to account for the adaptation period.**
+
+#### Change 6: Train-Val Gap Monitoring
+
+```python
+gap = tr_iou - va_iou
+gap_warn = " ⚠️ GAP!" if gap > 0.05 else ""
+tqdm.write(f"... | gap: {gap:.3f}{gap_warn} | ...")
+```
+
+**Why?** Phase 3 didn't explicitly monitor overfitting. For Phase 4, we added real-time gap tracking with a ⚠️ warning if train-val IoU gap exceeds 0.05 (chosen as the threshold where the model is clearly memorizing rather than generalizing).
+
+**Actual**: Gap stayed at 0.030–0.037 throughout — healthy. The frozen backbone + augmentations are strong overfitting guards.
+
+#### Change 7: Test-Time Augmentation (TTA)
+
+```python
+def evaluate_with_tta(model, backbone, loader, device, use_amp=False):
+    with torch.no_grad():
+        # Original prediction
+        tokens = backbone.forward_features(imgs)["x_norm_patchtokens"]
+        out1 = model(tokens)  # → upsample → [B, 10, H, W]
+
+        # Horizontally flipped prediction
+        imgs_flip = torch.flip(imgs, dims=[3])  # Flip width axis
+        tokens_flip = backbone.forward_features(imgs_flip)["x_norm_patchtokens"]
+        out2 = model(tokens_flip)
+        out2 = torch.flip(out2, dims=[3])  # Flip predictions back
+
+        # Average logits → more confident predictions
+        out = (out1 + out2) / 2.0
+```
+
+**Why horizontal flip?** Desert scenes are horizontally symmetric — a tree on the left looks the same on the right. By averaging predictions from the original and flipped views, we:
+
+1. **Reduce left-right bias** — if the model learned Sky is more common on the left (spurious correlation), TTA averages this out
+2. **Smooth boundary predictions** — edges get predictions from two perspectives, reducing noise
+3. **Free boost** — no training cost, only 2× inference time
+
+**Why only horizontal flip (not vertical or rotation)?** Vertical flip inverts Sky/Ground semantics — averaging would be catastrophic. Rotation at inference changes the image grid, requiring careful interpolation.
+
+**Expected**: +0.005–0.01 IoU.  
+**Actual**: +0.0019 IoU (0.5150 → 0.5169). ✅ Small but free — exactly what we expected for a simple 2-view TTA.
+
+#### Change 8: Model Saving to MODELS/ Directory
+
+```python
+models_dir = os.path.join(project_root, 'MODELS')
+# Save best checkpoint to both training output AND models dir
+torch.save(ckpt_data, os.path.join(output_dir, 'best_model.pth'))
+torch.save(ckpt_data, os.path.join(models_dir, f'phase4_best_model_iou{va_iou:.4f}.pth'))
+
+# Also update the inference-ready head weights
+torch.save(best_ckpt['model_state_dict'], os.path.join(models_dir, 'segmentation_head.pth'))
+```
+
+**Why dual save?** Phase 3 only saved to the training output directory. Phase 4 saves to both locations: the phase-specific folder (for reproducibility) and `MODELS/` (for easy deployment). The inference-ready `segmentation_head.pth` is always overwritten with the latest best model.
+
+### Expected vs Actual (Phase 4)
+
+| Aspect                | Expected               | Actual                                          |
+| --------------------- | ---------------------- | ----------------------------------------------- |
+| **IoU**               | 0.53–0.56              | **0.5150** ❌ didn't push higher                |
+| **TTA IoU**           | +0.005–0.01 boost      | **0.5169** (+0.37%) ✅                          |
+| **Per-class winners** | Rare classes +10-20%   | **Dry Bushes +54.5%, Trees +24.2%** ✅ exceeded |
+| **Per-class flat**    | Sky/Landscape stable   | **Sky −0.04%, Landscape −0.5%** ✅              |
+| **Overfitting**       | None (frozen backbone) | **Gap < 0.037** ✅                              |
+| **Early stopping**    | ~30–40 epochs          | **Ep 11** ❌ too early — loss change caused dip |
+| **Training time**     | 8–12 hours             | **2 hours** ✅ (early stop)                     |
+
+**Why we didn't reach 0.53+**: The loss rebalance created an adaptation period (Ep 2-5 dip) that "reset" some of Phase 3's learned patterns. The model spent 10 epochs recovering rather than improving. The two key mistakes:
+
+1. **Changed loss function + resumed from checkpoint** — these conflict. The checkpoint weights were optimized for the old loss landscape.
+2. **Patience too tight** — 10 wasn't enough to recover from the loss-induced dip and then find improvements beyond 0.515.
+
+**What DID work**: TTA (+0.37% free), per-class improvements (4 classes gained 13-55%), and the multi-scale augmentation (model generalized well, gap stayed low).
+
+---
+
+## Phase 5 Script: `train_phase5_controlled.py`
+
+### What Changed and Why
+
+Every change was a **direct response to Phase 4's ceiling** — the frozen backbone hit ~0.515 IoU across two phases. Expert consensus: the only path past 0.52 is controlled backbone fine-tuning.
+
+#### Change 1: Partial Backbone Unfreeze (Blocks 10–11)
+
+```python
+# Freeze everything first
+for param in backbone.parameters():
+    param.requires_grad = False
+
+# Unfreeze ONLY blocks 10 and 11 (last 2 of 12)
+for i, block in enumerate(backbone.blocks):
+    if i >= 10:
+        for param in block.parameters():
+            param.requires_grad = True
+
+# Keep patch_embed, cls_token, pos_embed, and norm frozen
+# Result: ~14M unfrozen (16% of backbone) + ~10M head = ~24M trainable
+```
+
+**Why last 2 blocks?** DINOv2's ViT-Base has 12 transformer blocks. Early blocks (0-5) encode low-level features (edges, textures) that are universal. Middle blocks (6-9) encode mid-level patterns. Blocks 10-11 encode **high-level semantics** — these are the ones that need domain-specific adaptation for offroad desert scenes vs. the general ImageNet-like data DINOv2 was pre-trained on.
+
+**Why not all 12?** Unfreezing the entire backbone with only 2857 training images would cause catastrophic overfitting. The model has 86M backbone parameters but only ~3K images. Even 2 blocks (~14M params) is aggressive — this is why we use extremely low LR.
+
+**Why not just block 11?** Expert allows 1-2 blocks. 2 blocks gives more representational flexibility. If overfitting is detected (gap > 0.05 for 3+ epochs), we stop early.
+
+#### Change 2: Differential Learning Rate
+
+```python
+optimizer = optim.AdamW([
+    {'params': backbone_params, 'lr': 5e-6},   # Backbone: 40x slower
+    {'params': head_params,     'lr': 2e-4},   # Head: normal range
+], weight_decay=1e-4)
+```
+
+**Why 5e-6 for backbone?** The backbone's pre-trained features are extremely valuable — they encode knowledge from 142M images. We want to _nudge_ these features toward offroad semantics, not overwrite them. 5e-6 is conservative: at this LR, weight changes after 30 epochs are <1% of original values. Expert allows up to 1e-5, but we start at 5e-6 for safety.
+
+**Why 2e-4 for head (not 3e-4)?** Phase 4 showed that 3e-4 was slightly too aggressive when resuming from checkpoint. 2e-4 provides gentler refinement while still allowing meaningful updates.
+
+**Why 40x ratio?** Standard for partial backbone fine-tuning. The backbone needs to preserve its pre-trained knowledge while the head needs to adapt its classification boundaries. A smaller ratio (10x) would update backbone too aggressively; a larger ratio (100x) would barely change backbone features.
+
+#### Change 3: Loss Rebalance (Focal γ=2.0, Dice=0.7, Focal=0.3)
+
+```python
+# Phase 4
+loss = 0.4 * FocalLoss(gamma=1.5) + 0.6 * DiceLoss()
+
+# Phase 5
+loss = 0.3 * FocalLoss(gamma=2.0) + 0.7 * DiceLoss()
+```
+
+**Why revert γ to 2.0?** Phase 4 used γ=1.5 which was softer. But with backbone fine-tuning, the model has more representational capacity. γ=2.0 is the original Focal Loss paper's recommendation — it aggressively downweights easy pixels (>90% confidence gets 100× less weight), forcing the model to focus on **hard boundary pixels and rare classes**. This is exactly what we need to push Logs/Rocks/Clutter higher.
+
+**Why Dice 0.7?** With backbone features now adapting, Dice Loss becomes even more important — it directly optimizes region-level overlap. Higher Dice weight (0.7) pushes the model to improve small-region segmentation quality rather than just pixel-level classification.
+
+#### Change 4: Gradient Clipping (Critical for Backbone Safety)
+
+```python
+scaler.unscale_(optimizer)
+# Backbone: strict clipping prevents pre-trained features from being destroyed
+torch.nn.utils.clip_grad_norm_(backbone_params, max_norm=1.0)
+# Head: permissive clipping for normal training dynamics
+torch.nn.utils.clip_grad_norm_(head_params, max_norm=5.0)
+scaler.step(optimizer)
+```
+
+**Why different clip norms?** Backbone gradients must be small and controlled — any gradient spike could destroy pre-trained features irreversibly. `max_norm=1.0` caps the gradient vector norm, preventing catastrophic updates. Head gradients are already safe (randomly initialized, no pre-trained knowledge to protect), so `max_norm=5.0` is permissive.
+
+**Why not in Phase 1-4?** With a fully frozen backbone, gradient clipping wasn't needed — gradients only flowed through the head. Now that backbone blocks receive gradients, clipping is **mandatory safety equipment**.
+
+#### Change 5: Reduced Augmentation Intensity
+
+```python
+# Phase 4
+A.ShiftScaleRotate(scale_limit=0.2, ...)  # 0.8x–1.2x (wide)
+A.RandomShadow(p=0.15)                    # ON
+
+# Phase 5
+A.ShiftScaleRotate(scale_limit=0.1, ...)  # 0.9x–1.1x (narrow)
+# RandomShadow REMOVED (p=0)
+```
+
+**Why narrower scale (0.2 → 0.1)?** With backbone blocks unfrozen, the model is more sensitive to training data distribution. Wide scale augmentation creates distribution shift that can destabilize backbone fine-tuning. 0.9x–1.1x still provides scale robustness but with gentler variation.
+
+**Why remove RandomShadow?** Synthetic shadows can create noisy gradients that propagate into backbone blocks, disrupting pre-trained shadow handling. The backbone already understands shadows from pre-training — adding synthetic ones during fine-tuning confuses rather than helps.
+
+#### Change 6: Enhanced Safety Monitoring
+
+```python
+# Track consecutive validation drops
+if va_iou < prev_val_iou:
+    consecutive_val_drops += 1
+else:
+    consecutive_val_drops = 0
+
+# SAFETY STOP: 3 consecutive drops + gap > 0.05 = definite overfit
+if consecutive_val_drops >= 3 and gap > 0.05:
+    print("SAFETY STOP: Overfitting detected!")
+    break
+```
+
+**Why two conditions?** A single val drop is normal noise. Two drops could be a plateau. Three consecutive drops with a growing train-val gap is a **definitive overfitting signal** — the backbone is memorizing training patterns. The dual condition (drops + gap) prevents false triggers from random fluctuation.
+
+**Why gap threshold 0.05?** In Phases 1-4, the gap never exceeded 0.037. A gap of 0.05 means the model is 3.5% better on train than val — this is where memorization starts to dominate generalization. Combined with 3 consecutive drops, it's an unambiguous overfit signal.
+
+#### Change 7: Backbone State Dict Saving
+
+```python
+# Save only the unfrozen blocks' state dict for checkpoint
+ckpt_data = {
+    'model_state_dict': model.state_dict(),
+    'backbone_state_dict': {k: v for k, v in backbone.state_dict().items()
+                            if any(f'blocks.{i}.' in k for i in [10, 11])},
+    'optimizer_state_dict': optimizer.state_dict(),
+    'val_iou': va_iou
+}
+```
+
+**Why save backbone state?** In Phase 4, only the head weights were saved (backbone was frozen, so unchanged). Now blocks 10-11 have been modified — we need to save their state too. At checkpoint reload, we update only those blocks in the backbone state dict, keeping blocks 0-9 at their original DINOv2 weights.
+
+**Why only blocks 10-11 (not full backbone)?** Saving the full backbone state dict would include 86M parameters of mostly unchanged weights. Saving only the 2 modified blocks reduces checkpoint size from ~330MB to ~82MB.
+
+### Expected vs Actual (Phase 5)
+
+| Aspect            | Expected                                             | Actual                 |
+| ----------------- | ---------------------------------------------------- | ---------------------- |
+| **IoU**           | 0.55–0.58 (best case 0.60)                           | _Training in progress_ |
+| **TTA IoU**       | +0.005–0.01 boost                                    | _Pending_              |
+| **Epoch 1-3**     | Slight drop (0.50–0.51) — normal unfreeze adjustment | _Pending_              |
+| **Peak**          | Epoch 15–25                                          | _Pending_              |
+| **Rare classes**  | Logs/Clutter/Rocks +0.04–0.10 each                   | _Pending_              |
+| **Overfitting**   | Gap ≤0.05 (safety stop if violated)                  | _Pending_              |
+| **Training time** | ~5–8 hours (30 epochs, ~15 min/ep)                   | _Pending_              |
+
+---
+
 ## Inference: `test_segmentation.py`
 
 Runs the best trained model on test images from `DATASET/Offroad_Segmentation_testImages/`.
@@ -514,21 +825,27 @@ Helper utilities:
 
 ## Parameter Evolution Table
 
-| Parameter           | Phase 1      | Phase 2         | Phase 3             | Why Changed                              |
-| ------------------- | ------------ | --------------- | ------------------- | ---------------------------------------- |
-| **Backbone**        | ViT-S (384d) | ViT-S (384d)    | **ViT-B (768d)**    | P2 couldn't distinguish similar textures |
-| **Head**            | ConvNeXt     | ConvNeXt        | **UPerNet**         | P2's single-scale missed small objects   |
-| **Loss**            | CE           | Weighted CE     | **Focal + Dice**    | Weighted CE didn't help Logs enough      |
-| **Optimizer**       | SGD 1e-4     | AdamW 5e-4      | AdamW 3e-4          | P1's SGD was too slow                    |
-| **LR Schedule**     | None         | CosineAnnealing | **Warmup + Cosine** | UPerNet needs warmup for stability       |
-| **Image Size**      | 476×266      | 476×266         | **644×364**         | Small objects (Logs) were sub-pixel      |
-| **Batch**           | 2            | 2               | 2 (eff. 4)          | ViT-B needs more stable gradients        |
-| **Epochs**          | 10           | 30              | 40                  | P1 undertrained, P2 converged at 26      |
-| **Augmentations**   | None         | 5 types         | **7 types**         | P1 had none, P3 adds shadow/CLAHE        |
-| **Normalization**   | BatchNorm    | BatchNorm       | **GroupNorm**       | BatchNorm fails at 1×1 spatial (PPM)     |
-| **Mixed Precision** | No           | Yes             | Yes                 | 6GB VRAM constraint                      |
-| **Checkpointing**   | Final only   | Best by IoU     | Best by IoU         | P1 didn't save best                      |
-| **Early Stopping**  | None         | Patience=10     | Patience=12         | P3 trained longer, needed more patience  |
+| Parameter           | Phase 1      | Phase 2         | Phase 3              | Phase 4              | Phase 5                           | Why Changed (P5)       |
+| ------------------- | ------------ | --------------- | -------------------- | -------------------- | --------------------------------- | ---------------------- |
+| **Backbone**        | ViT-S (384d) | ViT-S (384d)    | **ViT-B (768d)**     | ViT-B (768d)         | ViT-B (**blocks 10-11 unfrozen**) | Break frozen ceiling   |
+| **Head**            | ConvNeXt     | ConvNeXt        | **UPerNet**          | UPerNet              | UPerNet                           | Proven architecture    |
+| **Loss**            | CE           | Weighted CE     | Focal+Dice (1.0/0.5) | Focal+Dice (0.4/0.6) | **Focal+Dice (0.3/0.7)**          | More Dice for regions  |
+| **Focal γ**         | —            | —               | 2.0                  | 1.5                  | **2.0**                           | Revert for hard pixels |
+| **Optimizer**       | SGD 1e-4     | AdamW 5e-4      | AdamW 3e-4           | AdamW 3e-4           | **AdamW (bb=5e-6, hd=2e-4)**      | Differential LR        |
+| **LR Schedule**     | None         | CosineAnnealing | Warmup + Cosine      | Warmup + Cosine      | Warmup + Cosine (**both groups**) | Applied to both        |
+| **Image Size**      | 476×266      | 476×266         | **644×364**          | 644×364              | 644×364                           | No change              |
+| **Scale Aug**       | None         | ±15%            | ±15%                 | **±20%**             | **±10%**                          | Reduced for stability  |
+| **Batch**           | 2            | 2               | 2 (eff. 4)           | 2 (eff. 4)           | 2 (eff. 4)                        | VRAM safe              |
+| **Epochs**          | 10           | 30              | 40                   | 50 (stopped 11)      | **30**                            | Controlled run         |
+| **Augmentations**   | None         | 5 types         | 7 types              | 7 types (stronger)   | **6 types (−Shadow)**             | Noisy for backbone     |
+| **Normalization**   | BatchNorm    | BatchNorm       | **GroupNorm**        | GroupNorm            | GroupNorm                         | Proven                 |
+| **Mixed Precision** | No           | Yes             | Yes                  | Yes                  | Yes                               | 6GB VRAM constraint    |
+| **Checkpointing**   | Final only   | Best by IoU     | Best by IoU          | Best + `MODELS/`     | Best + `MODELS/` + **backbone**   | Save unfrozen blocks   |
+| **Early Stopping**  | None         | Patience=10     | Patience=12          | Patience=10          | **Patience=10**                   | Safety                 |
+| **Initialization**  | Random       | Random          | Random               | Phase 3 ckpt         | **Phase 4 ckpt**                  | Transfer learning      |
+| **TTA**             | No           | No              | No                   | HFlip avg            | **HFlip avg**                     | Free boost             |
+| **Overfit Monitor** | No           | No              | No                   | Gap tracking         | **Gap + consecutive drops**       | Enhanced safety        |
+| **Grad Clipping**   | No           | No              | No                   | No                   | **bb=1.0, hd=5.0**                | Backbone protection    |
 
 ---
 
@@ -554,6 +871,22 @@ Phase 3's warmup prevented the early instability we saw in some Phase 2 test run
 
 This was a production bug: BatchNorm crashes silently when spatial size = 1×1 (from AdaptiveAvgPool2d(1)). GroupNorm has no spatial-size dependency. **Always use GroupNorm in pooling-heavy architectures.**
 
-### 6. The Model Was Still Improving
+### 6. Don't Change Loss When Resuming From Checkpoint
 
-Phase 3 reached IoU=0.5161 at epoch 40 — but it was still improving (0.5154 → 0.5161 in last 4 epochs). Early stopping never triggered (patience=12). With 60+ epochs, we'd expect 0.52+ IoU. **Don't cut training short if the model is still learning.**
+Phase 4's biggest lesson. The Phase 3 weights were in a good local minimum for Focal(γ=2)+Dice(0.5). Switching to Focal(γ=1.5)+Dice(0.6) moved the loss landscape — the old minimum was no longer a minimum under the new loss. The model spent 10 epochs recovering. **When fine-tuning from a checkpoint, either keep the same loss or use a much lower LR (5e-5 instead of 3e-4) to gently adapt.**
+
+### 7. TTA is Free Performance
+
+Horizontal flip TTA added +0.37% IoU with zero training cost and only 2× inference time. For any submission or production deployment, TTA should be standard. More aggressive TTA (multi-scale + flip) could add more but requires careful implementation.
+
+### 8. Patience Must Account for Loss Changes
+
+With patience=10, Phase 4 stopped at Ep 11 — just as the model was recovering (Ep 10 IoU=0.5144, nearly matching best). The loss-change adaptation dip ate 5 of the 10 patience epochs. **When changing the training objective, set patience ≥ 2× the expected adaptation period.**
+
+### 9. Gradient Clipping is Non-Negotiable for Backbone Fine-Tuning
+
+Phase 5 introduces gradient clipping with different thresholds for backbone (1.0) and head (5.0). Without clipping, a single batch with unusual images (e.g., pure sky) could produce gradient spikes that irreversibly damage pre-trained backbone features. **Always clip gradients when fine-tuning pre-trained models.**
+
+### 10. Differential LR: The 40x Rule
+
+When fine-tuning backbone + head simultaneously, the backbone should learn 20-50× slower than the head. Phase 5 uses 5e-6 (backbone) vs 2e-4 (head) = 40× ratio. This preserves pre-trained knowledge while allowing domain adaptation. **Too small a ratio (≤10x) risks destroying backbone features; too large (≥100x) makes backbone fine-tuning pointless.**

@@ -1,0 +1,76 @@
+PHASE 4 — MASTERY TRAINING RESULTS
+================================================================================
+
+Configuration:
+  phase                         : Phase 4 — Mastery
+  backbone                      : dinov2_vitb14_reg (ViT-Base, frozen)
+  seg_head                      : UPerNet (PPM + multi-scale FPN)
+  loss                          : Focal (gamma=1.5, weight=0.4) + Dice (weight=0.6)
+  optimizer                     : AdamW (wd=1e-4)
+  lr                            : 0.0003 + warmup(3ep) + CosineAnnealing
+  batch_size                    : 2 (effective 4 with grad accum)
+  epochs                        : 50
+  image_size                    : 644x364
+  mixed_precision               : True
+  augmentations                 : HFlip, VFlip, MultiScale(0.8-1.2x), Blur, ColorJitter, RandomShadow, CLAHE
+  early_stopping                : 10
+  resume_from                   : Phase 3 best checkpoint (IoU=0.5161)
+  tta                           : HorizontalFlip average at eval
+  total_time_min                : 120.8
+  best_val_iou                  : 0.515
+  best_epoch                    : 1
+  tta_val_iou                   : 0.5169
+================================================================================
+
+Best Val IoU:      0.5150 (Epoch 1)
+Final Val IoU:     0.5110
+Final Val Dice:    0.7075
+Final Val Acc:     0.8291
+
+Per-Class IoU (Best Model):
+----------------------------------------
+  Background          : 0.5139
+  Trees               : 0.6256
+  Lush Bushes         : 0.5139
+  Dry Grass           : 0.5875
+  Dry Bushes          : 0.4346
+  Ground Clutter      : 0.2534
+  Logs                : 0.2473
+  Rocks               : 0.3156
+  Landscape           : 0.5491
+  Sky                 : 0.9681
+================================================================================
+
+
+TTA Val IoU:       0.5169
+TTA Val Dice:      0.7119
+TTA Val Acc:       0.8328
+TTA Per-Class IoU:
+----------------------------------------
+  Background          : 0.5150
+  Trees               : 0.6299
+  Lush Bushes         : 0.5166
+  Dry Grass           : 0.5888
+  Dry Bushes          : 0.4375
+  Ground Clutter      : 0.2544
+  Logs                : 0.2507
+  Rocks               : 0.3180
+  Landscape           : 0.5503
+  Sky                 : 0.9684
+================================================================================
+
+Per-Epoch History:
+------------------------------------------------------------------------------------------------------------------------
+Ep   TrLoss    VaLoss    TrIoU     VaIoU     TrDice    VaDice    TrAcc     VaAcc     LR          
+------------------------------------------------------------------------------------------------------------------------
+1    0.1952    0.1842    0.5488    0.5150    0.6950    0.7103    0.8356    0.8320    0.000200    
+2    0.1995    0.1888    0.5419    0.5077    0.6878    0.7035    0.8319    0.8287    0.000300    
+3    0.2027    0.1902    0.5388    0.5070    0.6838    0.7028    0.8340    0.8302    0.000300    
+4    0.2004    0.1911    0.5373    0.5010    0.6841    0.7006    0.8305    0.8282    0.000300    
+5    0.2029    0.1934    0.5307    0.5004    0.6806    0.6981    0.8291    0.8263    0.000299    
+6    0.2015    0.1870    0.5458    0.5089    0.6917    0.7065    0.8348    0.8304    0.000297    
+7    0.1993    0.1914    0.5371    0.5050    0.6832    0.7010    0.8331    0.8293    0.000295    
+8    0.2007    0.1875    0.5446    0.5087    0.6908    0.7066    0.8333    0.8291    0.000292    
+9    0.1981    0.1878    0.5443    0.5103    0.6901    0.7063    0.8333    0.8293    0.000288    
+10   0.1982    0.1854    0.5479    0.5144    0.6944    0.7095    0.8361    0.8320    0.000284    
+11   0.1977    0.1886    0.5437    0.5110    0.6897    0.7075    0.8331    0.8291    0.000279    

@@ -1,3 +1,4 @@
 /venv
 /DATASET/Offroad_Segmentation_testImages
 /DATASET/Offroad_Segmentation_Training_Dataset
+*.pth
