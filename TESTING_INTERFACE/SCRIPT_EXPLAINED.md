@@ -206,3 +206,5 @@ venv\Scripts\pip install gradio
 2. **Upload tab**: No ground-truth mask available — only pixel coverage is shown.
 3. **Load time**: Model loading takes ~30s on first start (DINOv2 downloads from torch.hub if not cached).
 4. **Dataset indexing**: ~15-30s on startup to scan all training/validation images.
+
+---

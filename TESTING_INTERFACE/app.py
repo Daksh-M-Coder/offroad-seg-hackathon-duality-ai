@@ -213,14 +213,17 @@ def _convert_mask(mask_arr):
     return out
 
 
+CACHE_PATH = os.path.join(SCRIPT_DIR, "dataset_index_cache.json")
+MIN_CLASS_PIXELS = 500   # min pixels of a class for the image to count for it
+
 def _index_dataset(split_dir):
     img_dir  = os.path.join(split_dir, "Color_Images")
     mask_dir = os.path.join(split_dir, "Segmentation")
     if not os.path.isdir(img_dir):
         return {}
     class_index: dict[int, list[tuple[str, str]]] = {c: [] for c in range(N_CLASSES)}
-
-    for fname in sorted(os.listdir(img_dir)):
+    all_images = sorted(os.listdir(img_dir))
+    for fname in all_images:
         mask_path = os.path.join(mask_dir, fname)
         img_path  = os.path.join(img_dir,  fname)
         if not os.path.isfile(mask_path):
@@ -232,30 +235,62 @@ def _index_dataset(split_dir):
             mask_raw = mask_raw[:, :, 0]
         mask_cls = _convert_mask(mask_raw)
         for c in range(N_CLASSES):
-            if (mask_cls == c).sum() > 500:   # at least 500 pixels of this class
+            if (mask_cls == c).sum() > MIN_CLASS_PIXELS:
                 class_index[c].append((img_path, mask_path))
-
     return class_index
 
 
-print("Indexing train + val datasets …")
-_train_idx = _index_dataset(TRAIN_DIR)
-_val_idx   = _index_dataset(VAL_DIR)
+def _build_index_with_cache(train_dir, val_dir, cache_path):
+    """Load class index from JSON cache if it exists, otherwise build and save it."""
+    if os.path.isfile(cache_path):
+        print(f"  ✓ Loading dataset index from cache: {cache_path}")
+        with open(cache_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        # JSON keys are strings — convert back to int
+        return {int(k): [tuple(p) for p in v] for k, v in raw.items()}
 
-# Merge, deduplicate, then select fixed 10 samples per class
-CLASS_INDEX: dict[int, list[tuple[str, str]]]  = {}
-CLASS_SAMPLES: dict[int, list[tuple[str, str]]] = {}   # fixed 10 per class for browser
+    print("  ⏳ Building index for the first time (this takes ~2-4 min, cached after) …")
+    merged: dict[int, list[tuple[str, str]]] = {c: [] for c in range(N_CLASSES)}
+    for split_dir in [train_dir, val_dir]:
+        idx = _index_dataset(split_dir)
+        for c in range(N_CLASSES):
+            merged[c].extend(idx.get(c, []))
+
+    # Deduplicate by image path
+    deduped = {}
+    for c in range(N_CLASSES):
+        seen = set()
+        deduped[c] = []
+        for pair in merged[c]:
+            if pair[0] not in seen:
+                seen.add(pair[0])
+                deduped[c].append(pair)
+
+    # Save to JSON cache
+    with open(cache_path, "w", encoding="utf-8") as f:
+        json.dump({str(k): [list(p) for p in v] for k, v in deduped.items()}, f)
+    print(f"  ✓ Index saved to cache: {cache_path}")
+    return deduped
+
+
+# ── Startup: build or load class index ────────────────────────────────────────
+print("Indexing dataset (or loading from cache) …")
+_all_index = _build_index_with_cache(TRAIN_DIR, VAL_DIR, CACHE_PATH)
+
+# Shuffle with fixed seed per class and split into full pool + fixed 10 browser samples
+CLASS_INDEX:   dict[int, list] = {}
+CLASS_SAMPLES: dict[int, list] = {}
 for c in range(N_CLASSES):
-    combined = list({p[0]: p for p in (_train_idx.get(c, []) + _val_idx.get(c, []))}.values())
+    pool = _all_index.get(c, [])
     random.seed(42 + c)
-    random.shuffle(combined)
-    CLASS_INDEX[c]   = combined                           # all samples (for random pick)
-    CLASS_SAMPLES[c] = combined[:SAMPLES_PER_CLASS]       # first 10 for browser tabs
+    random.shuffle(pool)
+    CLASS_INDEX[c]   = pool
+    CLASS_SAMPLES[c] = pool[:SAMPLES_PER_CLASS]
 
 total = sum(len(v) for v in CLASS_INDEX.values())
-print(f"  Indexed {total} (image, mask) pairs across {N_CLASSES} classes")
+print(f"  Indexed {total} pairs across {N_CLASSES} classes")
 for c in range(N_CLASSES):
-    print(f"  [{c:2d}] {CLASS_NAMES[c]:<18} — {len(CLASS_SAMPLES[c]):>2} browser samples  |  {len(CLASS_INDEX[c]):>4} total")
+    print(f"  [{c:2d}] {CLASS_NAMES[c]:<18} — {len(CLASS_SAMPLES[c]):>2} browser  | {len(CLASS_INDEX[c]):>4} total")
 print("=" * 60)
 
 
