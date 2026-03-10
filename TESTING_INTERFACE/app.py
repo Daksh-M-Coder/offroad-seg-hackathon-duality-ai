@@ -46,7 +46,9 @@ MODEL_PATH   = os.path.join(PROJECT_ROOT, "MODELS", "phase5_best_model_iou0.5294
 TRAIN_DIR    = os.path.join(PROJECT_ROOT, "DATASET", "Offroad_Segmentation_Training_Dataset", "train")
 VAL_DIR      = os.path.join(PROJECT_ROOT, "DATASET", "Offroad_Segmentation_Training_Dataset", "val")
 RESULTS_DIR  = os.path.join(SCRIPT_DIR, "RESULTS")
+IMGS_DIR     = os.path.join(SCRIPT_DIR, "IMGS")
 os.makedirs(RESULTS_DIR, exist_ok=True)
+os.makedirs(IMGS_DIR, exist_ok=True)
 
 # ─── Class Config ─────────────────────────────────────────────────────────────
 CLASS_NAMES = [
@@ -404,11 +406,15 @@ def _save_result_md(
     pred_px: list,
     gt_px: list,
     has_gt: bool,
+    img_files: dict,   # {"raw": path, "overlay": path, "mask": path}
+    seq: int,
+    ts: str,
 ):
-    seq  = _next_seq()
-    ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     fname = f"{seq:04d}_{ts}.md"
     path  = os.path.join(RESULTS_DIR, fname)
+
+    # Build relative paths from RESULTS/ to IMGS/ (one level up, then IMGS/)
+    def _rel(p): return os.path.join("..", "IMGS", os.path.basename(p)).replace("\\", "/")
 
     lines = [
         f"# Result #{seq:04d}",
@@ -421,6 +427,12 @@ def _save_result_md(
         f"| **Model** | Phase 5 — DINOv2 ViT-Base + UPerNet (IoU 0.5294, TTA 0.5310) |",
         f"| **Device** | {DEVICE} |",
         f"| **TTA** | ✅ HFlip average |",
+        f"",
+        f"## Visualisations",
+        f"",
+        f"| 📷 Original | 🎨 Segmentation Overlay | 🗺️ Prediction Mask |",
+        f"|---|---|---|",
+        f"| ![]({_rel(img_files['raw'])}) | ![]({_rel(img_files['overlay'])}) | ![]({_rel(img_files['mask'])}) |",
         f"",
     ]
 
@@ -551,12 +563,27 @@ def _run_inference(img_path: str, mask_path: str | None, source_label: str):
 
     metrics_text = "\n".join(lines_m)
 
+    # ── Save images to IMGS/ ──
+    seq  = _next_seq()
+    ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    prefix = f"{seq:04d}_{ts}"
+
+    raw_img_path     = os.path.join(IMGS_DIR, f"{prefix}_raw.png")
+    overlay_img_path = os.path.join(IMGS_DIR, f"{prefix}_overlay.png")
+    mask_img_path    = os.path.join(IMGS_DIR, f"{prefix}_mask.png")
+
+    cv2.imwrite(raw_img_path,     cv2.cvtColor(original_display, cv2.COLOR_RGB2BGR))
+    cv2.imwrite(overlay_img_path, cv2.cvtColor(overlay,          cv2.COLOR_RGB2BGR))
+    cv2.imwrite(mask_img_path,    cv2.cvtColor(mask_rgb,         cv2.COLOR_RGB2BGR))
+
+    img_files = {"raw": raw_img_path, "overlay": overlay_img_path, "mask": mask_img_path}
+
     # ── Save result MD ──
     md_fname = _save_result_md(
         source_label, img_fname, mean_iou, px_acc,
-        ious, dices, pred_px, gt_px, has_gt
+        ious, dices, pred_px, gt_px, has_gt, img_files, seq, ts
     )
-    result_info = f"💾 Saved → RESULTS/{md_fname}"
+    result_info = f"💾 Saved → RESULTS/{md_fname}  |  IMGS/{prefix}_{{raw,overlay,mask}}.png"
 
     return (
         Image.fromarray(original_display),
