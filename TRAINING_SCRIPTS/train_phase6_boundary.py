@@ -351,7 +351,7 @@ def evaluate(model, backbone, loader, device, use_amp=False):
                 tokens = backbone.forward_features(imgs)["x_norm_patchtokens"]
                 logits = model(tokens)
                 out = F.interpolate(logits, size=imgs.shape[2:], mode="bilinear", align_corners=False)
-            labels = labels.squeeze(1).long()
+            labels = labels.long()  # already [B,H,W] — squeeze(1) was a no-op
             iou, cls_iou = compute_iou(out, labels)
             ious.append(iou); dices.append(compute_dice(out, labels))
             accs.append(compute_pixel_accuracy(out, labels)); all_cls.append(cls_iou)
@@ -406,7 +406,7 @@ def evaluate_with_multiscale_tta(model, backbone, loader, device, use_amp=False,
 
             combined_out /= (len(scales) * 2)  # average across all passes
 
-            labels = labels.squeeze(1).long()
+            labels = labels.long()  # [B,H,W] — no squeeze needed
             iou, cls_iou = compute_iou(combined_out, labels)
             ious.append(iou); dices.append(compute_dice(combined_out, labels))
             accs.append(compute_pixel_accuracy(combined_out, labels)); all_cls.append(cls_iou)
@@ -445,8 +445,8 @@ def compute_class_weights(loader, num_classes=10, device='cuda'):
     w = total / (num_classes * counts + 1e-6)
     w = w / w.max() * 5.0
     w = w.float().to(device)
-    for name, wt in zip(class_names, w):
-        print(f"  {name:<20}: {wt:.4f} ({int(counts[class_names.index(name)])} px)")
+    for i, (name, wt) in enumerate(zip(class_names, w)):  # use index i, not class_names.index()
+        print(f"  {name:<20}: {wt:.4f} ({int(counts[i])} px)")
     return w
 
 
@@ -583,12 +583,20 @@ def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"Using device: {device}")
 
+    # ── Reproducibility seeds (expert recommendation) ──
+    torch.manual_seed(42)
+    np.random.seed(42)
+    import random; random.seed(42)
+    if device.type == 'cuda':
+        torch.cuda.manual_seed_all(42)
+    print("  Seeds set: torch=42, numpy=42, random=42")
+
     # ── Config ──
     batch_size   = 2
     accum_steps  = 2          # effective batch = 4
     w = 46 * 14               # 644
     h = 26 * 14               # 364
-    lr_backbone  = 3e-6       # Very conservative — block 9 is shape-sensitive
+    lr_backbone  = 4e-6       # Expert rec: 4e-6 gives block 9 faster adaptation (50× ratio vs head) while staying ≤ 5e-6
     lr_head      = 2e-4
     n_epochs     = 30
     warmup_epochs = 3
@@ -751,7 +759,7 @@ def main():
                 tokens = backbone.forward_features(imgs)["x_norm_patchtokens"]
                 logits = model(tokens)
                 out    = F.interpolate(logits, size=imgs.shape[2:], mode="bilinear", align_corners=False)
-                labels = labels.squeeze(1).long()
+                labels = labels.long()  # [B,H,W] — no squeeze needed
                 loss   = loss_fn(out, labels) / accum_steps
 
             scaler.scale(loss).backward()
@@ -774,8 +782,8 @@ def main():
                     tokens = backbone.forward_features(imgs)["x_norm_patchtokens"]
                     logits = model(tokens)
                     out    = F.interpolate(logits, size=imgs.shape[2:], mode="bilinear", align_corners=False)
-                    labels = labels.squeeze(1).long()
-                    loss   = loss_fn(out, labels)
+                    labels = labels.long()  # [B,H,W] — no squeeze needed
+                loss   = loss_fn(out, labels)
                 val_losses.append(loss.item())
 
         # ── Metrics ──
