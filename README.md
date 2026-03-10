@@ -48,15 +48,16 @@
 
 ## 🏆 Results Summary
 
-|           Phase           |  Val IoU   |  Val Dice  | Val Accuracy | Improvement |
-| :-----------------------: | :--------: | :--------: | :----------: | :---------: |
-|       P1 — Baseline       |   0.2971   |   0.4416   |    70.41%    |      —      |
-|       P2 — Improved       |   0.4036   |   0.6116   |    74.61%    |   +35.8%    |
-|       P3 — Advanced       |   0.5161   |   0.7116   |    83.07%    |   +73.7%    |
-|       P4 — Mastery        |   0.5169   |   0.7119   |    83.28%    |   +73.9%    |
-| **P5 — Controlled (TTA)** | **0.5310** | **0.7236** |  **83.67%**  | **+78.2%**  |
+|           Phase           |   Val IoU    |  Val Dice  | Val Accuracy |  Improvement   |
+| :-----------------------: | :----------: | :--------: | :----------: | :------------: |
+|       P1 — Baseline       |    0.2971    |   0.4416   |    70.41%    |       —        |
+|       P2 — Improved       |    0.4036    |   0.6116   |    74.61%    |     +35.8%     |
+|       P3 — Advanced       |    0.5161    |   0.7116   |    83.07%    |     +73.7%     |
+|       P4 — Mastery        |    0.5169    |   0.7119   |    83.28%    |     +73.9%     |
+| **P5 — Controlled (TTA)** |  **0.5310**  | **0.7236** |  **83.67%**  |   **+78.2%**   |
+|    P6 — Boundary (TBD)    | _~0.55–0.58_ |    _—_     |     _—_      | _target: +10%_ |
 
-> **From 0.30 → 0.53** — we broke through the frozen backbone ceiling in Phase 5 by unfreezing ViT-Base blocks 10-11. Total gain across 5 phases: **+78.2%**.
+> **P1 → P5**: 0.30 → 0.53 (**+78.2%**). Phase 6 targets 0.55–0.58 via Boundary Loss + Multi-Scale TTA + blocks 9-11 unfrozen. Training **not started yet**.
 
 ---
 
@@ -78,6 +79,7 @@ offroad-seg-hackathon-duality-ai/
 │   ├── train_phase3_advanced.py          # Phase 3 — ViT-Base + UPerNet + Focal/Dice
 │   ├── train_phase4_mastery.py           # Phase 4 — Multi-scale + loss rebalance + TTA
 │   ├── train_phase5_controlled.py        # Phase 5 — Backbone fine-tuning (blocks 10-11) + differential LR
+│   ├── train_phase6_boundary.py          # Phase 6 — Boundary loss + multi-scale TTA + blocks 9-11 ⭐ READY
 │   ├── test_segmentation.py             # Inference on test images
 │   ├── visualize.py                     # Visualization utilities
 │   └── SCRIPTS_EXPLAINED.md             # 📖 Deep-dive docs for all scripts & parameters
@@ -161,6 +163,15 @@ offroad-seg-hackathon-duality-ai/
 │       ├── history.json                 # Machine-readable metrics (+ TTA)
 │       ├── best_model.pth               # Best val IoU (0.5294)
 │       └── final_model.pth              # Ep 30 weights
+│   └── PHASE_6_BOUNDARY/               # ⭐ Phase 6 — Boundary-Aware (READY TO RUN)
+│       └── (outputs will appear here after training)
+│
+├── TESTING_INTERFACE/                    # 🔬 Gradio visual testing dashboard
+│   ├── app.py                           # Visual model tester (class picker + upload + metrics)
+│   ├── SCRIPT_EXPLAINED.md             # Interface documentation
+│   ├── dataset_index_cache.json        # Auto-built class→file index
+│   ├── IMGS/                            # Saved PNG images per result (raw/overlay/mask)
+│   └── RESULTS/                         # Timestamped .md reports with embedded images
 │
 ├── SYSTEM_CHECK/                         # Hardware verification scripts
 │   ├── system_specs.py                  # Full system spec checker
@@ -589,6 +600,146 @@ Multi-Scale Feature Pyramid:
 
 ---
 
+## 🔥 Phase 5 — Controlled Backbone Fine-Tuning ⭐ BEST
+
+> **Goal**: Break the 0.516 frozen-backbone ceiling by carefully unfreezing ViT-Base blocks 10-11 with differential learning rates and gradient clipping.
+
+### What Changed vs Phase 4
+
+| Component              | Phase 4            | Phase 5                                   | Why                                      |
+| ---------------------- | ------------------ | ----------------------------------------- | ---------------------------------------- |
+| **Backbone**           | Fully frozen       | **Blocks 10-11 UNFROZEN** (14.18M params) | Break the 0.516 ceiling                  |
+| **Backbone LR**        | N/A                | **5e-6** (40× slower than head)           | Preserve pre-trained features            |
+| **Head LR**            | 3e-4               | **2e-4** (safer for checkpoint resume)    | Learned from P4's loss-landscape lesson  |
+| **Focal γ**            | 1.5                | **2.0** (reverted to P3)                  | Stronger hard-pixel focus                |
+| **Focal / Dice Mix**   | 0.4 / 0.6          | **0.3 / 0.7**                             | Let Dice dominate for region overlap     |
+| **Scale augmentation** | ±20%               | **±10%**                                  | Reduced noise for backbone stability     |
+| **RandomShadow**       | ON (p=0.15)        | **REMOVED**                               | Noisy gradients during unfreeze          |
+| **Gradient Clipping**  | None               | **bb max_norm=1.0, head max_norm=5.0**    | Backbone protection from gradient spikes |
+| **Safety Stop**        | None               | **3 consecutive drops + gap > 0.05**      | Overfit auto-detection                   |
+| **Initialization**     | Phase 3 checkpoint | **Phase 4 checkpoint (0.5150)**           | Continue from latest best                |
+| **Epochs**             | 50 (stopped at 11) | **30** (all completed)                    | Controlled run                           |
+
+### Configuration
+
+| Parameter             | Value                                                                 |
+| --------------------- | --------------------------------------------------------------------- |
+| **Backbone**          | DINOv2 ViT-Base (`vitb14_reg`) — **blocks 10-11 unfrozen**            |
+| **Trainable Params**  | **17,592,842** (backbone 14.18M + head 3.41M)                         |
+| **Backbone split**    | 14.18M unfrozen / 86M total (16.5%)                                   |
+| **Head**              | UPerNet (PPM pool sizes 1/2/3/6 + FPN dilations 1/2/4, GroupNorm)     |
+| **Loss**              | Focal (γ=2.0, w=0.3) + Dice (w=0.7) with class weights                |
+| **Optimizer**         | AdamW — backbone lr=5e-6, head lr=2e-4, weight_decay=1e-4             |
+| **LR Schedule**       | 3-epoch linear warmup → CosineAnnealing (applied to both groups)      |
+| **Gradient Clipping** | Backbone max_norm=1.0, Head max_norm=5.0                              |
+| **Batch Size**        | 2 (effective 4 via gradient accumulation)                             |
+| **Image Size**        | 644×364 (46×26 patch tokens — unchanged from P3/P4)                   |
+| **Augmentations**     | HFlip, VFlip, MultiScale (±10%), Blur, ColorJitter, CLAHE — no Shadow |
+| **Mixed Precision**   | ✅ AMP (fp16 forward)                                                 |
+| **Early Stopping**    | Patience=10 — **not triggered**                                       |
+| **Safety Stop**       | 3 consecutive val drops + gap > 0.05 — **not triggered**              |
+| **TTA**               | HFlip + logit average                                                 |
+
+### Results: IoU = 0.5294 (TTA 0.5310) — +2.74% over Phase 4
+
+| Epoch  | Train Loss | Val Loss | Train IoU |    Val IoU    |  Gap  | LR (bb) | LR (head) |
+| :----: | :--------: | :------: | :-------: | :-----------: | :---: | :-----: | :-------: |
+|   1    |   0.2236   |  0.2105  |  0.5516   |    0.5161     | 0.035 | 3.33e-6 |  1.33e-4  |
+|   2    |   0.2246   |  0.2125  |  0.5477   |    0.5129     | 0.035 | 5.00e-6 |  2.00e-4  |
+|   3    |   0.2272   |  0.2138  |  0.5458   |    0.5111     | 0.035 | 5.00e-6 |  2.00e-4  |
+|   4    |   0.2261   |  0.2125  |  0.5457   |    0.5130     | 0.033 | 4.98e-6 |  1.99e-4  |
+|   5    |   0.2257   |  0.2116  |  0.5487   |    0.5151     | 0.034 | 4.93e-6 |  1.97e-4  |
+|   7    |   0.2218   |  0.2114  |  0.5500   |    0.5152     | 0.035 | 4.73e-6 |  1.89e-4  |
+| **10** |   0.2209   |  0.2101  |  0.5518   |  **0.5169**   | 0.035 | 4.22e-6 |  1.69e-4  |
+| **11** |   0.2209   |  0.2087  |  0.5530   | **0.5194** 🔥 | 0.034 | 3.99e-6 |  1.60e-4  |
+|   13   |   0.2190   |  0.2078  |  0.5559   |    0.5210     | 0.035 | 3.49e-6 |  1.40e-4  |
+|   15   |   0.2190   |  0.2069  |  0.5571   |    0.5224     | 0.035 | 2.93e-6 |  1.17e-4  |
+| **18** |   0.2157   |  0.2057  |  0.5609   |  **0.5246**   | 0.036 | 2.07e-6 |  8.26e-5  |
+| **20** |   0.2148   |  0.2046  |  0.5605   |  **0.5258**   | 0.035 | 1.51e-6 |  6.04e-5  |
+|   22   |   0.2141   |  0.2042  |  0.5645   |    0.5268     | 0.038 | 1.01e-6 |  4.03e-5  |
+|   24   |   0.2141   |  0.2031  |  0.5638   |    0.5287     | 0.035 | 5.85e-7 |  2.34e-5  |
+|   26   |   0.2127   |  0.2029  |  0.5654   |    0.5289     | 0.037 | 2.66e-7 |  1.06e-5  |
+|   27   |   0.2131   |  0.2027  |  0.5658   |    0.5292     | 0.037 | 1.51e-7 |  6.03e-6  |
+| **29** |   0.2127   |  0.2026  |  0.5657   | **0.5294** ⭐ | 0.036 | 1.69e-8 |  6.76e-7  |
+|   30   |   0.2124   |  0.2026  |  0.5671   |    0.5294     | 0.038 |    0    |     0     |
+
+> No early stopping triggered. No safety stop triggered. Gap stayed 0.033–0.038 throughout — well below the 0.05 danger threshold.
+
+### Final Scores
+
+| Metric             |  Train |    Val |  Val (TTA) |
+| ------------------ | -----: | -----: | ---------: |
+| **IoU**            | 0.5671 | 0.5294 | **0.5310** |
+| **Dice**           | 0.7224 | 0.7224 | **0.7236** |
+| **Pixel Accuracy** | 83.93% | 83.58% | **83.67%** |
+| **Train-Val Gap**  |      — |  0.038 |          — |
+
+### Training Curves
+
+![Phase 5 — All Metrics](TRAINING%20AND%20PROGRESS/PHASE_5_CONTROLLED/all_metrics_curves.png)
+
+> **What to see**: Smooth monotonic improvement over all 30 epochs. A brief 3-epoch dip (Ep 1-3, backbone adjusting to new domain) then **near-linear climb** from Ep 4 through 30. Train-Val gap stays flat at 0.033-0.038 — textbook generalization.
+
+### Differential LR Schedule
+
+![Phase 5 — LR Schedule](TRAINING%20AND%20PROGRESS/PHASE_5_CONTROLLED/lr_schedule.png)
+
+> **What to see**: The 40× differential is clear — backbone LR peaks at 5e-6 while head peaks at 2e-4. Both follow the same warmup + cosine decay. Best epoch (29) occurs when both LRs are near zero — fine-tuning's final refinement stage.
+
+### Overfit Gap Monitor
+
+![Phase 5 — Overfit Gap](TRAINING%20AND%20PROGRESS/PHASE_5_CONTROLLED/overfit_gap.png)
+
+> **What to see**: Gap is flat at 0.033-0.038 for all 30 epochs — zero overfitting. The orange danger line (0.05) was never approached. The 5e-6 backbone LR + gradient clipping (max_norm=1.0) + reduced augmentations made this rock-solid.
+
+### Per-Class IoU
+
+![Phase 5 — Per-Class IoU](TRAINING%20AND%20PROGRESS/PHASE_5_CONTROLLED/per_class_iou.png)
+
+| Class              | Phase 4 (TTA) | Phase 5 (TTA) |    Change     | Verdict           |
+| ------------------ | :-----------: | :-----------: | :-----------: | ----------------- |
+| **Background**     |    0.5150     |  **0.5291**   | **+2.74%** ✅ | Improved          |
+| **Trees**          |    0.6299     |  **0.6435**   | **+2.16%** ✅ | Improved          |
+| **Lush Bushes**    |    0.5166     |  **0.5322**   | **+3.02%** ✅ | Improved          |
+| **Dry Grass**      |    0.5888     |  **0.5989**   | **+1.71%** ✅ | Improved          |
+| **Dry Bushes**     |    0.4375     |  **0.4529**   | **+3.51%** ✅ | Improved          |
+| **Ground Clutter** |    0.2544     |  **0.2646**   | **+4.01%** ✅ | Improved          |
+| **Logs**           |    0.2507     |  **0.2975**   | **+18.7%** ✅ | **Major gain** 🔥 |
+| **Rocks**          |    0.3180     |  **0.3403**   | **+7.01%** ✅ | Significant gain  |
+| **Landscape**      |    0.5503     |  **0.5555**   | **+0.95%** ✅ | Slight gain       |
+| **Sky**            |    0.9684     |  **0.9702**   | **+0.19%** ✅ | Saturated         |
+
+> 🎉 **First time in 5 phases that EVERY class improved.** Backbone fine-tuning helps all classes simultaneously — better features lift everything.
+
+### Analysis
+
+**Epochs 1-3 — Expected Adjustment Dip**: Val IoU drops 0.516 → 0.511. The backbone's blocks 10-11 temporarily disrupt the head's learned feature distribution as they start adapting to the offroad domain. The gradient clipping (max_norm=1.0) keeps this from becoming catastrophic.
+
+**Epochs 4-10 — Recovery & First Territory**: Val IoU climbs back: 0.513 → 0.517. By Epoch 7, the model exceeds Phase 4's best for the first time. By Epoch 10, it matches Phase 4's TTA score (0.5169) — without TTA.
+
+**Epoch 11 — 🔥 Breaking Through to New Territory**: Val IoU=0.5194. The first time in the entire project we're above 0.519. Backbone blocks 10-11 have finished adapting and are now actively contributing improved semantic representations for desert classes.
+
+**Epochs 12-20 — Steady Climb**: IoU: 0.52 → 0.526. Each epoch the backbone refines its domain-specific representations. Logs (+18.7%) and Rocks (+7%) see disproportionate gains — these classes have distinctive textures that DINOv2's ImageNet pre-training didn't capture well.
+
+**Epochs 21-30 — Convergence**: IoU: 0.526 → 0.5294. The LR approaches zero (cosine tail), enabling the finest-grain weight adjustments. Best achieved at Epoch 29 (0.5294) — matched exactly at Epoch 30.
+
+**Key Insight — Why Every Class Won**: Unlike Phase 4's loss rebalance (which helped some classes at the expense of others), backbone fine-tuning improves the _quality of representations_ for all classes simultaneously. Better backbone features = better everything.
+
+### Overfit Analysis
+
+| Epoch | Train IoU | Val IoU |  Gap  | Status     |
+| :---: | :-------: | :-----: | :---: | ---------- |
+|   1   |   0.552   |  0.516  | 0.035 | ✅ Healthy |
+|  10   |   0.552   |  0.517  | 0.035 | ✅ Healthy |
+|  15   |   0.557   |  0.522  | 0.035 | ✅ Healthy |
+|  20   |   0.561   |  0.526  | 0.035 | ✅ Healthy |
+|  25   |   0.566   |  0.529  | 0.038 | ✅ Healthy |
+|  30   |   0.567   |  0.529  | 0.038 | ✅ Healthy |
+
+**Verdict**: Zero overfitting detected. The gap increased by only 0.003 across 30 epochs — essentially flat. The 5e-6 backbone LR + gradient clipping + reduced augmentations created the most stable training run in the entire project.
+
+---
+
 ## 📈 Five-Phase Comparison
 
 ### Overall Metrics
@@ -645,13 +796,13 @@ Phase 4 → Phase 5 (+2.7% IoU):
 | **Ground Clutter** |  0.076  |  0.116  |  0.254  |   **0.265**   |   +248.7%    | Dice focus + scale augmentation          |
 | **Logs**           |  0.052  |  0.252  |  0.251  |   **0.298**   |   +473.1%    | Backbone semantic adaptation             |
 
-### Key Breakthroughs (Across All 4 Phases)
+### Key Breakthroughs (Across All 5 Phases)
 
-- **Logs: 0.05 → 0.25 (+383%)** — From nearly undetectable to usable. Focal Loss was the hero.
-- **Landscape: 0.36 → 0.55 (+52.5%)** — PPM global pooling taught spatial context.
-- **Rocks: 0.16 → 0.32 (+92.7%)** — Multi-scale FPN detects scattered rocks.
-- **Dry Bushes: 0.28 → 0.44 (+56.8%)** — ViT-Base features + Dice rebalance.
-- **Trees: 0.50 → 0.63 (+25.3%)** — Phase 4's Dice weight boost helped most.
+- **Logs: 0.05 → 0.30 (+471%)** — From nearly undetectable to usable. Focal Loss + backbone fine-tuning (Phase 5 alone: +18.7%).
+- **Landscape: 0.36 → 0.56 (+54%)** — PPM global pooling taught spatial context in Phase 3.
+- **Rocks: 0.13 → 0.34 (+162%)** — Resolution + backbone fine-tuning (Phase 5: +7%).
+- **Dry Bushes: 0.28 → 0.45 (+62%)** — ViT-Base features + Dice rebalance + backbone adaptation.
+- **Ground Clutter: 0.076 → 0.265 (+249%)** — Dice focus + backbone fine-tuning's domain adaptation.
 
 ---
 
@@ -774,4 +925,4 @@ This project was created for the **Ignitia Hackathon** by [Daksh-M-Coder](https:
 
 ---
 
-> _"From 0.30 to 0.52 — every percentage point of IoU was fought for with better architecture, smarter losses, and careful engineering within 6GB of VRAM."_
+> _"From 0.30 to 0.53 — every percentage point of IoU was fought for with better architecture, smarter losses, and careful engineering within 6GB of VRAM. Phase 5 proved that controlled backbone fine-tuning is the key to breaking frozen-backbone ceilings."_

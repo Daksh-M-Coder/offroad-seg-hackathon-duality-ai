@@ -823,29 +823,119 @@ Helper utilities:
 
 ---
 
+---
+
+## Phase 6 Script: `train_phase6_boundary.py`
+
+### Goal
+
+Push Val IoU from **0.5294 → 0.55–0.58** by attacking the four confirmed bottlenecks from the Phase 5 report:
+
+| Bottleneck                | Fix                                      |
+| ------------------------- | ---------------------------------------- |
+| Small object size (Logs)  | Multi-Scale TTA (zoom-in passes)         |
+| Texture confusion (Rocks) | Block 9 unfrozen (richer shape features) |
+| Boundary precision errors | New **Boundary Loss** component          |
+| Token resolution limits   | Sliding-scale inference (0.9×–1.2×)      |
+
+---
+
+### Key Changes vs Phase 5
+
+| Feature               | Phase 5              | Phase 6                                                     |
+| --------------------- | -------------------- | ----------------------------------------------------------- |
+| **Backbone unfrozen** | Blocks 10-11         | **Blocks 9-10-11** (+block 9)                               |
+| **Backbone LR**       | 5e-6                 | **3e-6** (more conservative for block 9)                    |
+| **Head LR**           | 2e-4                 | 2e-4 (unchanged)                                            |
+| **Loss**              | Focal(0.3)+Dice(0.7) | **Focal(0.25)+Dice(0.55)+Boundary(0.20)**                   |
+| **TTA**               | HFlip (2 passes)     | **Multi-Scale**: 0.9×+1.0×+1.1×+1.2× × HFlip = **8 passes** |
+| **Epochs**            | 30                   | 30                                                          |
+| **Patience**          | 10                   | 10                                                          |
+| **Augmentations**     | 6 types (no Shadow)  | Same (Shadow still removed)                                 |
+
+---
+
+### Boundary Loss — How It Works
+
+The `BoundaryLoss` class (`scipy.ndimage` based):
+
+1. **Edge detection per class**: For each class in the GT mask, erode the mask by 2 pixels via `binary_erosion`. The boundary pixels are `mask XOR eroded`.
+2. **Soft boundary zone**: Apply Gaussian blur (σ=2.0) to get a smooth weight map — pixels close to edges get higher weight.
+3. **Weighted cross-entropy**: Multiply standard CE loss by `(1 + boundary_weight)` so edge pixels contribute up to **2× more** than interior pixels.
+
+```
+Boundary weight example:
+  Interior pixels: weight = 1.0 (normal)
+  Near-edge pixels: weight ≈ 1.5–2.0 (penalised 50–100% more)
+```
+
+Why this improves IoU: The gap between Pixel Accuracy (83.6%) and IoU (53%) in Phase 5 signals that most errors are at object boundaries — the model gets the broad region right but mis-classifies edge pixels. BoundaryLoss directly targets these.
+
+---
+
+### Multi-Scale TTA — How It Works
+
+Phase 5 TTA: 1 scale × 2 (normal + HFlip) = **2 passes**
+
+Phase 6 TTA: 4 scales × 2 = **8 passes**:
+
+```
+  0.9×  normal, 0.9×  flip
+  1.0×  normal, 1.0×  flip   ← same as Phase 5
+  1.1×  normal, 1.1×  flip
+  1.2×  normal, 1.2×  flip
+```
+
+Each scale is rounded to the nearest multiple of 14 (DINOv2 patch size) to keep valid token grids. The `forward_scaled(toks, tokenH, tokenW)` method on `UPerNetHead` handles dynamic token grid sizes at inference — this is a new extension not present in Phase 5.
+
+Why 1.2× helps Logs: A thin log that spans 3 tokens at 1.0× spans ~3.6 tokens at 1.2×, giving the model sharper spatial context.
+
+---
+
+### Block 9 — Why It Matters
+
+DINOv2 ViT-Base has 12 transformer blocks. Block structure:
+
+| Blocks | Role                                                                   |
+| ------ | ---------------------------------------------------------------------- |
+| 0-5    | Low-level features (edges, textures)                                   |
+| 6-8    | Mid-level features (object parts, shapes)                              |
+| 9      | **Shape formation** — where logs/rocks get distinctive representations |
+| 10-11  | High-level semantics (used in Phase 5)                                 |
+
+Block 9 is critical for distinguishing visually similar objects (rocks vs ground). Unfreezing it with an ultra-low LR (3e-6) lets the domain adapt shapes without catastrophic forgetting.
+
+---
+
+### Safety Features (same as Phase 5)
+
+- Train-Val gap monitor: warning if gap > 0.05
+- Consecutive val-drop safety stop: halts if val IoU drops 3 epochs in a row AND gap > 0.05
+- Gradient clipping: backbone 1.0, head 5.0
+- Early stopping: patience=10
+- All best models saved to `MODELS/` with IoU in filename
+
+---
+
 ## Parameter Evolution Table
 
-| Parameter           | Phase 1      | Phase 2         | Phase 3              | Phase 4              | Phase 5                           | Why Changed (P5)       |
-| ------------------- | ------------ | --------------- | -------------------- | -------------------- | --------------------------------- | ---------------------- |
-| **Backbone**        | ViT-S (384d) | ViT-S (384d)    | **ViT-B (768d)**     | ViT-B (768d)         | ViT-B (**blocks 10-11 unfrozen**) | Break frozen ceiling   |
-| **Head**            | ConvNeXt     | ConvNeXt        | **UPerNet**          | UPerNet              | UPerNet                           | Proven architecture    |
-| **Loss**            | CE           | Weighted CE     | Focal+Dice (1.0/0.5) | Focal+Dice (0.4/0.6) | **Focal+Dice (0.3/0.7)**          | More Dice for regions  |
-| **Focal γ**         | —            | —               | 2.0                  | 1.5                  | **2.0**                           | Revert for hard pixels |
-| **Optimizer**       | SGD 1e-4     | AdamW 5e-4      | AdamW 3e-4           | AdamW 3e-4           | **AdamW (bb=5e-6, hd=2e-4)**      | Differential LR        |
-| **LR Schedule**     | None         | CosineAnnealing | Warmup + Cosine      | Warmup + Cosine      | Warmup + Cosine (**both groups**) | Applied to both        |
-| **Image Size**      | 476×266      | 476×266         | **644×364**          | 644×364              | 644×364                           | No change              |
-| **Scale Aug**       | None         | ±15%            | ±15%                 | **±20%**             | **±10%**                          | Reduced for stability  |
-| **Batch**           | 2            | 2               | 2 (eff. 4)           | 2 (eff. 4)           | 2 (eff. 4)                        | VRAM safe              |
-| **Epochs**          | 10           | 30              | 40                   | 50 (stopped 11)      | **30**                            | Controlled run         |
-| **Augmentations**   | None         | 5 types         | 7 types              | 7 types (stronger)   | **6 types (−Shadow)**             | Noisy for backbone     |
-| **Normalization**   | BatchNorm    | BatchNorm       | **GroupNorm**        | GroupNorm            | GroupNorm                         | Proven                 |
-| **Mixed Precision** | No           | Yes             | Yes                  | Yes                  | Yes                               | 6GB VRAM constraint    |
-| **Checkpointing**   | Final only   | Best by IoU     | Best by IoU          | Best + `MODELS/`     | Best + `MODELS/` + **backbone**   | Save unfrozen blocks   |
-| **Early Stopping**  | None         | Patience=10     | Patience=12          | Patience=10          | **Patience=10**                   | Safety                 |
-| **Initialization**  | Random       | Random          | Random               | Phase 3 ckpt         | **Phase 4 ckpt**                  | Transfer learning      |
-| **TTA**             | No           | No              | No                   | HFlip avg            | **HFlip avg**                     | Free boost             |
-| **Overfit Monitor** | No           | No              | No                   | Gap tracking         | **Gap + consecutive drops**       | Enhanced safety        |
-| **Grad Clipping**   | No           | No              | No                   | No                   | **bb=1.0, hd=5.0**                | Backbone protection    |
+| Parameter           | Phase 1      | Phase 2         | Phase 3              | Phase 4              | Phase 5                           | Phase 6                                   |
+| ------------------- | ------------ | --------------- | -------------------- | -------------------- | --------------------------------- | ----------------------------------------- |
+| **Backbone**        | ViT-S (384d) | ViT-S (384d)    | **ViT-B (768d)**     | ViT-B (768d)         | ViT-B (**blocks 10-11 unfrozen**) | ViT-B (**blocks 9-10-11 unfrozen**)       |
+| **Head**            | ConvNeXt     | ConvNeXt        | **UPerNet**          | UPerNet              | UPerNet                           | UPerNet                                   |
+| **Loss**            | CE           | Weighted CE     | Focal+Dice (1.0/0.5) | Focal+Dice (0.4/0.6) | **Focal+Dice (0.3/0.7)**          | **Focal(0.25)+Dice(0.55)+Boundary(0.20)** |
+| **Focal γ**         | —            | —               | 2.0                  | 1.5                  | 2.0                               | 2.0                                       |
+| **Optimizer**       | SGD 1e-4     | AdamW 5e-4      | AdamW 3e-4           | AdamW 3e-4           | AdamW (bb=5e-6, hd=2e-4)          | **AdamW (bb=3e-6, hd=2e-4)**              |
+| **LR Schedule**     | None         | CosineAnnealing | Warmup + Cosine      | Warmup + Cosine      | Warmup + Cosine (both)            | Warmup + Cosine (both)                    |
+| **Image Size**      | 476×266      | 476×266         | **644×364**          | 644×364              | 644×364                           | 644×364                                   |
+| **Scale Aug**       | None         | ±15%            | ±15%                 | ±20%                 | ±10%                              | ±8%                                       |
+| **Batch**           | 2            | 2               | 2 (eff. 4)           | 2 (eff. 4)           | 2 (eff. 4)                        | 2 (eff. 4)                                |
+| **Epochs**          | 10           | 30              | 40                   | 50 (stopped 11)      | 30                                | 30                                        |
+| **TTA**             | No           | No              | No                   | HFlip (2 passes)     | HFlip (2 passes)                  | **Multi-Scale×HFlip (8 passes)**          |
+| **Backbone Blocks** | Frozen       | Frozen          | Frozen               | Frozen               | 10-11 unfrozen                    | **9-10-11 unfrozen**                      |
+| **Boundary Loss**   | No           | No              | No                   | No                   | No                                | **Yes (σ=2.0, Gauss-weighted CE)**        |
+| **Early Stopping**  | None         | Patience=10     | Patience=12          | Patience=10          | Patience=10                       | Patience=10                               |
+| **Initialization**  | Random       | Random          | Random               | Phase 3 ckpt         | Phase 4 ckpt                      | **Phase 5 ckpt**                          |
 
 ---
 
@@ -890,3 +980,11 @@ Phase 5 introduces gradient clipping with different thresholds for backbone (1.0
 ### 10. Differential LR: The 40x Rule
 
 When fine-tuning backbone + head simultaneously, the backbone should learn 20-50× slower than the head. Phase 5 uses 5e-6 (backbone) vs 2e-4 (head) = 40× ratio. This preserves pre-trained knowledge while allowing domain adaptation. **Too small a ratio (≤10x) risks destroying backbone features; too large (≥100x) makes backbone fine-tuning pointless.**
+
+### 11. Boundary Errors Are the Next Frontier
+
+Once backbone and head are well-tuned, the remaining gap between Pixel Accuracy (83.6%) and IoU (53%) is almost entirely due to boundary imprecision — the model gets the broad region right but misses the exact edges of thin objects like Logs. **Standard Focal+Dice loss treats all pixels equally. BoundaryLoss re-weights CE by proximity to object edges, forcing the model to pay attention to the exact shape of predictions rather than just the broad region.**
+
+### 12. Multi-Scale TTA Compensates for ViT's Coarse Tokenization
+
+DINOv2 ViT-Base uses 14-pixel patches. At 644×364, a 120-pixel-wide log spans only ~8.5 tokens — coarse enough to miss thin details. Running TTA at 1.2× scale means those same pixels now span ~10.2 tokens, giving the backbone better spatial resolution for rare objects. **Multi-scale TTA is especially effective for ViT backbones because their fixed patch size creates resolution blind spots at the original image scale.**

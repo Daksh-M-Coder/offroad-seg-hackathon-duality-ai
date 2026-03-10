@@ -86,9 +86,25 @@ STD  = [0.229, 0.224, 0.225]
 # Samples per class shown in the browser
 SAMPLES_PER_CLASS = 10
 
-# ─── Result counter (thread-safe) ─────────────────────────────────────────────
-_result_lock   = threading.Lock()
-_result_seq    = 0
+# ─── Result counter (thread-safe, persists across restarts) ──────────────────
+_result_lock = threading.Lock()
+
+def _init_seq_from_disk() -> int:
+    """Scan RESULTS/ and IMGS/ for highest existing sequence number so we
+    never reuse or collide with previous sessions after a restart."""
+    max_seq = 0
+    for folder in [RESULTS_DIR, IMGS_DIR]:
+        if not os.path.isdir(folder):
+            continue
+        for fname in os.listdir(folder):
+            # filenames start with NNNN_ (4-digit seq)
+            parts = fname.split("_", 1)
+            if parts[0].isdigit():
+                max_seq = max(max_seq, int(parts[0]))
+    return max_seq
+
+_result_seq = _init_seq_from_disk()
+print(f"  Sequence counter initialized at {_result_seq} (from existing files)")
 
 def _next_seq():
     global _result_seq

@@ -36,5 +36,8 @@ psutil
 # --- Memory-Efficient Attention ---
 xformers
 
+# --- Testing Interface ---
+gradio>=4.0
+
 # --- Experiment Tracking (optional but recommended) ---
 tensorboard
