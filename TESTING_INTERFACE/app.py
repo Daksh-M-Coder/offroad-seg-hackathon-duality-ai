@@ -1,7 +1,7 @@
 """
 TESTING INTERFACE — Offroad Segmentation Visual Tester
 =======================================================
-Gradio-based visual testing dashboard for the Phase 5 segmentation model.
+Gradio-based visual testing dashboard for the Phase 6 segmentation model.
 
 Features:
   - Pre-loaded sample browser: 10 fixed samples per class (100 total)
@@ -10,6 +10,10 @@ Features:
   - Labeled segmentation overlay with class colour legend
   - Per-class IoU, Dice, Pixel Accuracy metrics for every prediction
   - Auto-saves every result as a timestamped MD report in TESTING_INTERFACE/RESULTS/
+
+Model: Phase 6 best checkpoint (IoU=0.5368, Multi-Scale TTA IoU=0.5527)
+  - DINOv2 ViT-Base, blocks 9-11 fine-tuned
+  - BoundaryLoss + Multi-Scale TTA (8 passes)
 
 Run:
     cd "PIXEL IMG SEGMENTATION"
@@ -42,7 +46,7 @@ SCRIPT_DIR   = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
 
 # ─── Paths ────────────────────────────────────────────────────────────────────
-MODEL_PATH   = os.path.join(PROJECT_ROOT, "MODELS", "phase5_best_model_iou0.5294.pth")
+MODEL_PATH   = os.path.join(PROJECT_ROOT, "MODELS", "phase6_best_model_iou0.5368.pth")
 TRAIN_DIR    = os.path.join(PROJECT_ROOT, "DATASET", "Offroad_Segmentation_Training_Dataset", "train")
 VAL_DIR      = os.path.join(PROJECT_ROOT, "DATASET", "Offroad_Segmentation_Training_Dataset", "val")
 RESULTS_DIR  = os.path.join(SCRIPT_DIR, "RESULTS")
@@ -77,7 +81,7 @@ VALUE_MAP = {
     550: 5, 700: 6, 800: 7, 7100: 8, 10000: 9
 }
 
-# Image / token dimensions (must match Phase 5 training)
+# Image / token dimensions (must match Phase 6 training - identical to Phase 5)
 IMG_W, IMG_H = 644, 364          # 46×14, 26×14
 TOKEN_W, TOKEN_H = 46, 26        # 644/14, 364/14
 MEAN = [0.485, 0.456, 0.406]

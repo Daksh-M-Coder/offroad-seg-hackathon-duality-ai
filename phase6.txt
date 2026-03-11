@@ -1,0 +1,204 @@
+Microsoft Windows [Version 10.0.26200.7840]
+(c) Microsoft Corporation. All rights reserved.
+
+C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION>venv\Scripts\activate
+
+(venv) C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION>dir
+ Volume in drive C is OS
+ Volume Serial Number is CAD9-79AF
+
+ Directory of C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION
+
+10-03-2026  01:09    <DIR>          .
+10-03-2026  20:13    <DIR>          ..
+26-02-2026  00:02    <DIR>          .obsidian
+27-02-2026  19:55    <DIR>          .vscode
+10-03-2026  01:30    <DIR>          BASIC_INTRO
+01-03-2026  00:12    <DIR>          DATASET
+26-02-2026  00:56    <DIR>          DATA_INSIGHTS
+10-03-2026  19:44    <DIR>          ENV_SETUP
+10-03-2026  15:30    <DIR>          MODELS
+27-02-2026  22:33           766,597 Pasted image 20260227223327.png
+27-02-2026  22:34           650,840 Pasted image 20260227223426.png
+27-02-2026  22:34           910,543 Pasted image 20260227223447.png
+01-03-2026  00:17    <DIR>          pdf
+10-03-2026  15:01            53,166 README.md
+10-03-2026  01:14               913 requirements.txt
+08-03-2026  01:05            13,883 RULES.MD
+08-03-2026  21:51               825 specs_result.json
+27-02-2026  20:20    <DIR>          SYSTEM_CHECK
+10-03-2026  10:22    <DIR>          TESTING_INTERFACE
+10-03-2026  14:42    <DIR>          TRAINING AND PROGRESS
+10-03-2026  14:46    <DIR>          TRAINING_SCRIPTS
+27-02-2026  19:54    <DIR>          venv
+               7 File(s)      2,396,767 bytes
+              15 Dir(s)  163,572,662,272 bytes free
+
+(venv) C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION>cd training_scripts
+
+(venv) C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS>dir
+ Volume in drive C is OS
+ Volume Serial Number is CAD9-79AF
+
+ Directory of C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS
+
+10-03-2026  14:46    <DIR>          .
+10-03-2026  01:09    <DIR>          ..
+10-03-2026  14:47            54,068 SCRIPTS_EXPLAINED.md
+12-12-2025  11:44            17,232 test_segmentation.py
+12-12-2025  12:22            19,993 train_phase1_baseline.py
+28-02-2026  01:33            29,934 train_phase2_improved.py
+28-02-2026  13:28            25,982 train_phase3_advanced.py
+01-03-2026  13:20            30,661 train_phase4_mastery.py
+01-03-2026  19:07            36,695 train_phase5_controlled.py
+10-03-2026  16:07            40,749 train_phase6_boundary.py
+12-12-2025  12:22             1,775 visualize.py
+               9 File(s)        257,089 bytes
+               2 Dir(s)  163,558,965,248 bytes free
+
+(venv) C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS>python train_phase6_boundary.py
+Using device: cuda
+  Seeds set: torch=42, numpy=42, random=42
+Config: {
+  "phase": "Phase 6 \u2014 Boundary-Aware Fine-Tuning",
+  "backbone": "dinov2_vitb14_reg (ViT-Base) \u2014 blocks 9-11 UNFROZEN",
+  "seg_head": "UPerNet (PPM + multi-scale FPN)",
+  "loss": "Focal (\u03b3=2.0, w=0.25) + Dice (w=0.55) + Boundary (w=0.20)",
+  "optimizer": "AdamW (backbone_lr=4e-06, head_lr=0.0002, wd=1e-4)",
+  "lr_schedule": "warmup(3ep) + CosineAnnealing, differential",
+  "batch_size": "2 (effective 4 with grad accum)",
+  "epochs": 30,
+  "image_size": "644x364",
+  "mixed_precision": true,
+  "augmentations": "HFlip, VFlip, MultiScale(0.92-1.08x), Blur, ColorJitter, CLAHE",
+  "early_stopping": 10,
+  "resume_from": "Phase 5 best checkpoint (IoU=0.5294)",
+  "tta": "Multi-Scale ((0.9, 1.0, 1.1, 1.2)) \u00d7 HFlip \u2014 8 passes",
+  "backbone_unfreeze": "Blocks 9-10-11 (last 3 of 12)",
+  "new_in_phase6": "BoundaryLoss + multi-scale TTA"
+}
+C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\venv\Lib\site-packages\albumentations\core\validation.py:114: UserWarning: ShiftScaleRotate is a special case of Affine transform. Please use Affine transform instead.
+  original_init(self, **validated_kwargs)
+C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS\train_phase6_boundary.py:107: UserWarning: Argument(s) 'value' are not valid for transform ShiftScaleRotate
+  A.ShiftScaleRotate(shift_limit=0.08, scale_limit=0.08, rotate_limit=12,
+Train: 2857, Val: 317
+Loading DINOv2 ViT-Base backbone (blocks 9-11 will be unfrozen)...
+Using cache found in C:\Users\daksh/.cache\torch\hub\facebookresearch_dinov2_main
+A matching Triton is not available, some optimizations will not be enabled
+Traceback (most recent call last):
+  File "C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\venv\Lib\site-packages\xformers\__init__.py", line 57, in _is_triton_available
+    import triton  # noqa
+    ^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'triton'
+C:\Users\daksh/.cache\torch\hub\facebookresearch_dinov2_main\dinov2\layers\swiglu_ffn.py:43: UserWarning: xFormers is available (SwiGLU)
+  warnings.warn("xFormers is available (SwiGLU)")
+C:\Users\daksh/.cache\torch\hub\facebookresearch_dinov2_main\dinov2\layers\attention.py:27: UserWarning: xFormers is available (Attention)
+  warnings.warn("xFormers is available (Attention)")
+C:\Users\daksh/.cache\torch\hub\facebookresearch_dinov2_main\dinov2\layers\block.py:33: UserWarning: xFormers is available (Block)
+  warnings.warn("xFormers is available (Block)")
+Backbone: 21,268,224 / 86,583,552 params unfrozen (24.6%)
+  Unfrozen blocks: 9, 10, 11 (last 3 of 12)
+Embedding: 768, Tokens: (26×46)
+Loading Phase 5 checkpoint: C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING AND PROGRESS\PHASE_5_CONTROLLED\best_model.pth
+  ✓ Restored Phase 5 backbone blocks 10-11 — block 9 starts from pretrained state
+  Loaded from Epoch 29, Val IoU: 0.5294081895430928
+Head trainable: 3,414,026
+Total trainable: 24,682,250
+Computing class weights...
+  Background          : 0.0481 (51888545 px)
+  Trees               : 0.1092 (22863905 px)
+  Lush Bushes         : 0.0651 (38324483 px)
+  Dry Grass           : 0.0208 (120179763 px)
+  Dry Bushes          : 0.3560 (7011464 px)
+  Ground Clutter      : 0.0897 (27842197 px)
+  Logs                : 5.0000 (499218 px)
+  Rocks               : 0.3286 (7595852 px)
+  Landscape           : 0.0162 (154176587 px)
+  Sky                 : 0.0104 (239344498 px)
+
+Phase 6 Boundary Training: 30 epochs, 644×364, ViT-Base (blocks 9-11)
+  Focal(γ=2.0,w=0.25) + Dice(w=0.55) + Boundary(w=0.20)
+  Backbone LR: 4e-06 | Head LR: 0.0002
+  Resume from Phase 5 (IoU=0.5294) | Multi-Scale TTA: (0.9, 1.0, 1.1, 1.2)
+================================================================================
+Training:   0%|                                                                              | 0/30 [00:00<?, ?epoch/s]
+  >> NEW BEST! IoU: 0.5267 (Ep 1)
+  Ep  1 | loss: 0.185/0.176 | IoU: 0.562/0.527 | gap: 0.036 | best: 0.527 | lr_bb: 2.7e-06 lr_hd: 1.3e-04
+  Ep  2 | loss: 0.186/0.177 | IoU: 0.562/0.526 | gap: 0.036 | best: 0.527 | lr_bb: 4.0e-06 lr_hd: 2.0e-04
+  Ep  3 | loss: 0.187/0.178 | IoU: 0.558/0.523 | gap: 0.035 | best: 0.527 | lr_bb: 4.0e-06 lr_hd: 2.0e-04
+  Ep  4 | loss: 0.187/0.179 | IoU: 0.555/0.521 | gap: 0.035 | best: 0.527 | lr_bb: 4.0e-06 lr_hd: 2.0e-04 ⛔ 3 consecutive val drops!
+  Ep  5 | loss: 0.185/0.177 | IoU: 0.561/0.525 | gap: 0.036 | best: 0.527 | lr_bb: 3.9e-06 lr_hd: 2.0e-04
+  Ep  6 | loss: 0.186/0.177 | IoU: 0.562/0.526 | gap: 0.036 | best: 0.527 | lr_bb: 3.9e-06 lr_hd: 1.9e-04
+  Ep  7 | loss: 0.185/0.176 | IoU: 0.561/0.526 | gap: 0.036 | best: 0.527 | lr_bb: 3.8e-06 lr_hd: 1.9e-04
+  Ep  8 | loss: 0.186/0.176 | IoU: 0.564/0.526 | gap: 0.037 | best: 0.527 | lr_bb: 3.7e-06 lr_hd: 1.8e-04
+Training:  27%|█████████████████▎                                               | 8/30 [2:01:50<5:24:43, 885.62s/epoch]
+  >> NEW BEST! IoU: 0.5277 (Ep 9)
+  Ep  9 | loss: 0.185/0.175 | IoU: 0.565/0.528 | gap: 0.037 | best: 0.528 | lr_bb: 3.5e-06 lr_hd: 1.8e-04
+  Ep 10 | loss: 0.184/0.176 | IoU: 0.562/0.525 | gap: 0.037 | best: 0.528 | lr_bb: 3.4e-06 lr_hd: 1.7e-04
+  Ep 11 | loss: 0.184/0.175 | IoU: 0.563/0.527 | gap: 0.036 | best: 0.528 | lr_bb: 3.2e-06 lr_hd: 1.6e-04
+Training:  37%|███████████████████████▍                                        | 11/30 [2:52:04<5:04:10, 960.56s/epoch]
+  >> NEW BEST! IoU: 0.5288 (Ep 12)
+  Ep 12 | loss: 0.183/0.175 | IoU: 0.566/0.529 | gap: 0.037 | best: 0.529 | lr_bb: 3.0e-06 lr_hd: 1.5e-04
+Training:  40%|█████████████████████████▌                                      | 12/30 [3:08:24<4:49:56, 966.47s/epoch]
+  >> NEW BEST! IoU: 0.5306 (Ep 13)
+  Ep 13 | loss: 0.182/0.174 | IoU: 0.566/0.531 | gap: 0.035 | best: 0.531 | lr_bb: 2.8e-06 lr_hd: 1.4e-04
+Training:  43%|███████████████████████████▋                                    | 13/30 [3:23:25<4:28:15, 946.78s/epoch]
+  >> NEW BEST! IoU: 0.5308 (Ep 14)
+  Ep 14 | loss: 0.182/0.174 | IoU: 0.566/0.531 | gap: 0.035 | best: 0.531 | lr_bb: 2.6e-06 lr_hd: 1.3e-04
+Training:  47%|█████████████████████████████▊                                  | 14/30 [3:40:52<4:20:29, 976.85s/epoch]
+  >> NEW BEST! IoU: 0.5317 (Ep 15)
+  Ep 15 | loss: 0.181/0.174 | IoU: 0.568/0.532 | gap: 0.037 | best: 0.532 | lr_bb: 2.3e-06 lr_hd: 1.2e-04
+  Ep 16 | loss: 0.181/0.173 | IoU: 0.566/0.531 | gap: 0.036 | best: 0.532 | lr_bb: 2.1e-06 lr_hd: 1.1e-04
+Training:  53%|██████████████████████████████████▏                             | 16/30 [4:11:48<3:40:08, 943.46s/epoch]
+  >> NEW BEST! IoU: 0.5331 (Ep 17)
+  Ep 17 | loss: 0.181/0.173 | IoU: 0.569/0.533 | gap: 0.036 | best: 0.533 | lr_bb: 1.9e-06 lr_hd: 9.4e-05
+Training:  57%|████████████████████████████████████▎                           | 17/30 [4:26:21<3:19:51, 922.43s/epoch]
+  >> NEW BEST! IoU: 0.5335 (Ep 18)
+  Ep 18 | loss: 0.181/0.172 | IoU: 0.569/0.533 | gap: 0.035 | best: 0.533 | lr_bb: 1.7e-06 lr_hd: 8.3e-05
+  Ep 19 | loss: 0.181/0.172 | IoU: 0.570/0.533 | gap: 0.037 | best: 0.533 | lr_bb: 1.4e-06 lr_hd: 7.1e-05
+Training:  63%|████████████████████████████████████████▌                       | 19/30 [4:53:19<2:38:04, 862.22s/epoch]
+  >> NEW BEST! IoU: 0.5350 (Ep 20)
+  Ep 20 | loss: 0.179/0.172 | IoU: 0.571/0.535 | gap: 0.036 | best: 0.535 | lr_bb: 1.2e-06 lr_hd: 6.0e-05
+  Ep 21 | loss: 0.179/0.172 | IoU: 0.572/0.535 | gap: 0.037 | best: 0.535 | lr_bb: 1.0e-06 lr_hd: 5.0e-05
+Training:  70%|████████████████████████████████████████████▊                   | 21/30 [5:19:26<2:03:18, 822.04s/epoch]
+  >> NEW BEST! IoU: 0.5353 (Ep 22)
+  Ep 22 | loss: 0.179/0.171 | IoU: 0.572/0.535 | gap: 0.037 | best: 0.535 | lr_bb: 8.1e-07 lr_hd: 4.0e-05
+  Ep 23 | loss: 0.179/0.171 | IoU: 0.572/0.535 | gap: 0.037 | best: 0.535 | lr_bb: 6.3e-07 lr_hd: 3.1e-05
+Training:  77%|█████████████████████████████████████████████████               | 23/30 [5:45:42<1:33:53, 804.84s/epoch]
+  >> NEW BEST! IoU: 0.5355 (Ep 24)
+  Ep 24 | loss: 0.178/0.171 | IoU: 0.572/0.535 | gap: 0.036 | best: 0.535 | lr_bb: 4.7e-07 lr_hd: 2.3e-05
+Training:  80%|███████████████████████████████████████████████████▏            | 24/30 [5:58:45<1:19:49, 798.25s/epoch]
+  >> NEW BEST! IoU: 0.5360 (Ep 25)
+  Ep 25 | loss: 0.178/0.171 | IoU: 0.573/0.536 | gap: 0.037 | best: 0.536 | lr_bb: 3.3e-07 lr_hd: 1.6e-05
+Training:  83%|█████████████████████████████████████████████████████▎          | 25/30 [6:11:48<1:06:09, 793.95s/epoch]
+  >> NEW BEST! IoU: 0.5361 (Ep 26)
+  Ep 26 | loss: 0.178/0.171 | IoU: 0.574/0.536 | gap: 0.038 | best: 0.536 | lr_bb: 2.1e-07 lr_hd: 1.1e-05
+Training:  87%|█████████████████████████████████████████████████████████▏        | 26/30 [6:24:51<52:42, 790.51s/epoch]
+  >> NEW BEST! IoU: 0.5364 (Ep 27)
+  Ep 27 | loss: 0.177/0.171 | IoU: 0.573/0.536 | gap: 0.037 | best: 0.536 | lr_bb: 1.2e-07 lr_hd: 6.0e-06
+Training:  90%|███████████████████████████████████████████████████████████▍      | 27/30 [6:37:51<39:22, 787.43s/epoch]
+  >> NEW BEST! IoU: 0.5368 (Ep 28)
+  Ep 28 | loss: 0.177/0.171 | IoU: 0.575/0.537 | gap: 0.039 | best: 0.537 | lr_bb: 5.4e-08 lr_hd: 2.7e-06
+Training:  93%|█████████████████████████████████████████████████████████████▌    | 28/30 [6:50:49<26:08, 784.49s/epoch]
+  >> NEW BEST! IoU: 0.5368 (Ep 29)
+  Ep 29 | loss: 0.178/0.171 | IoU: 0.574/0.537 | gap: 0.038 | best: 0.537 | lr_bb: 1.4e-08 lr_hd: 6.8e-07
+  Ep 30 | loss: 0.178/0.171 | IoU: 0.575/0.537 | gap: 0.039 | best: 0.537 | lr_bb: 0.0e+00 lr_hd: 0.0e+00
+Training: 100%|██████████████████████████████████████████████████████████████████| 30/30 [7:16:50<00:00, 873.68s/epoch]
+
+  Running Multi-Scale TTA evaluation on best model...
+  Multi-Scale TTA — IoU: 0.5527, Dice: 0.7404, Acc: 0.8438
+
+Total training time: 438.8 min
+Traceback (most recent call last):
+  File "C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS\train_phase6_boundary.py", line 889, in <module>
+    main()
+  File "C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS\train_phase6_boundary.py", line 878, in main
+    save_metrics(history, output_dir, config)
+  File "C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS\train_phase6_boundary.py", line 531, in save_metrics
+    f.write(f"  {k:<30}: {v}\n")
+  File "C:\Users\daksh\AppData\Local\Programs\Python\Python311\Lib\encodings\cp1252.py", line 19, in encode
+    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+UnicodeEncodeError: 'charmap' codec can't encode character '\u03b3' in position 41: character maps to <undefined>
+
+(venv) C:\Users\daksh\Programmer\Learning\COMP TECH SKILL\LOW CODE PROJECTS\PIXEL IMG SEGMENTATION\TRAINING_SCRIPTS>

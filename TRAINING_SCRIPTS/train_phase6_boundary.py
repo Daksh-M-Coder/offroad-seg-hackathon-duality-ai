@@ -524,7 +524,7 @@ def save_plots(history, output_dir):
 def save_metrics(history, output_dir, config):
     os.makedirs(output_dir, exist_ok=True)
     filepath = os.path.join(output_dir, 'evaluation_metrics.txt')
-    with open(filepath, 'w') as f:
+    with open(filepath, 'w', encoding='utf-8') as f:  # utf-8: handles gamma/arrows/unicode in config
         f.write("PHASE 6 — BOUNDARY-AWARE FINE-TUNING RESULTS\n" + "=" * 80 + "\n\n")
         f.write("Configuration:\n")
         for k, v in config.items():

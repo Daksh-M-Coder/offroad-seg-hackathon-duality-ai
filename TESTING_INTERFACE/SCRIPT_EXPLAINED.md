@@ -1,7 +1,7 @@
 # Testing Interface — Script Explained
 
 > **File**: `TESTING_INTERFACE/app.py`  
-> **Purpose**: Interactive Gradio dashboard for visually testing the Phase 5 segmentation model on training/validation images and custom uploads.
+> **Purpose**: Interactive Gradio dashboard for visually testing the **Phase 6** segmentation model on training/validation images and custom uploads.
 
 ---
 
@@ -17,19 +17,27 @@ The testing interface gives a **visual, interactive way** to see the model's pre
 
 ---
 
-## Architecture Used
+## Model Loaded
 
-The interface loads the **Phase 5 best checkpoint** (`MODELS/phase5_best_model_iou0.5294.pth`):
+The interface loads the **Phase 6 best checkpoint** (`MODELS/phase6_best_model_iou0.5368.pth`):
 
-| Component      | Detail                                                         |
-| -------------- | -------------------------------------------------------------- |
-| **Backbone**   | DINOv2 ViT-Base (`dinov2_vitb14_reg`), blocks 10-11 fine-tuned |
-| **Head**       | UPerNet (PPM + multi-scale FPN, GroupNorm)                     |
-| **Input size** | 644×364 (46×26 patch tokens)                                   |
-| **TTA**        | Horizontal flip + logit average                                |
-| **Output**     | 10-class segmentation map                                      |
+| Component      | Detail                                                                          |
+| -------------- | ------------------------------------------------------------------------------- |
+| **Backbone**   | DINOv2 ViT-Base (`dinov2_vitb14_reg`), **blocks 9-11 fine-tuned**              |
+| **Head**       | UPerNet (PPM + multi-scale FPN, GroupNorm)                                      |
+| **Input size** | 644×364 (46×26 patch tokens)                                                   |
+| **TTA**        | Horizontal flip + logit average (same as training eval)                         |
+| **Output**     | 10-class segmentation map                                                        |
+| **Best IoU**   | **0.5368** (Val, non-TTA) / **0.5527** (Val, Multi-Scale TTA)                  |
 
-The `backbone_state_dict` stored in the checkpoint (containing fine-tuned blocks 10 and 11) is automatically restored when loading.
+The `backbone_state_dict` stored in the checkpoint (containing fine-tuned blocks **9, 10, and 11**) is automatically restored when loading. Block 9 contains shape-encoding features that Phase 6 adapted specifically for desert terrain edge precision.
+
+### Model Changelog
+
+| Version | File | Val IoU (TTA) | Key Change |
+|---|---|---|---|
+| Phase 5 | `phase5_best_model_iou0.5294.pth` | 0.5310 | Blocks 10-11 fine-tuned |
+| **Phase 6** ← current | `phase6_best_model_iou0.5368.pth` | **0.5527** | Blocks 9-11 + BoundaryLoss + Multi-Scale TTA |
 
 ---
 
@@ -58,7 +66,7 @@ The `backbone_state_dict` stored in the checkpoint (containing fine-tuned blocks
 
 - **Dropdown**: Select any of the 10 semantic classes by name.
 - **Slider (1–10)**: Pick which of the 10 fixed samples to use.
-- **Purpose**: Reproducible testing — the same sample always gives the same image. Use this to compare model behaviour across multiple runs or after fine-tuning.
+- **Purpose**: Reproducible testing — the same sample always gives the same image. Use this to compare model behaviour across phases or fine-tuning runs.
 - **Ground truth available**: ✅ Yes — IoU and Dice are computed against the real mask.
 
 The 10 samples per class are selected at startup using a fixed seed (`random.seed(42 + class_id)`) from all images in the train+val sets where the class covers at least 500 pixels.
@@ -86,7 +94,7 @@ The original image blended with the colour-coded prediction mask at **55% mask o
 
 ### Prediction Mask
 
-Pure colour-coded mask with **no image blending** — useful to see exact prediction boundaries.
+Pure colour-coded mask with **no image blending** — useful to see exact prediction boundaries. Phase 6's BoundaryLoss makes these edges noticeably sharper than Phase 5, especially for Logs and Rocks.
 
 ### Class Legend
 
@@ -127,25 +135,33 @@ Shows:
 
 ## Result Logging
 
-Every single prediction (no matter which tab) automatically saves a Markdown file:
+Every single prediction (no matter which tab) automatically saves a Markdown file and 3 images:
 
 ```
 TESTING_INTERFACE/
-└── RESULTS/
-    ├── 0001_20260310_011500.md
-    ├── 0002_20260310_011523.md
+├── RESULTS/
+│   ├── 0001_20260310_011500.md     ← metrics + embedded images
+│   ├── 0002_20260310_011523.md
+│   └── ...
+└── IMGS/
+    ├── 0001_20260310_011500_raw.png
+    ├── 0001_20260310_011500_overlay.png
+    ├── 0001_20260310_011500_mask.png
     └── ...
 ```
 
-**Filename format**: `{4-digit sequence}_{YYYYMMDD_HHMMSS}.md`
+**Filename format**: `{4-digit sequence}_{YYYYMMDD_HHMMSS}_{type}`
 
-Each file contains:
+The sequence counter **persists across restarts** — it scans existing RESULTS/IMGS/ on startup to find the highest existing number and continues from there. No gaps, no collisions.
+
+Each `.md` result file contains:
 
 - Source (which tab, which class, which file)
-- Model version used
+- **Model version**: Phase 6 (`phase6_best_model_iou0.5368.pth`)
 - Device (CUDA/CPU)
 - Metrics table (IoU, Dice, pixel counts per class)
 - Timestamp
+- **Embedded images** (raw, overlay, mask) as a comparison table
 
 ---
 
@@ -196,15 +212,16 @@ venv\Scripts\pip install gradio
 | `alpha` (overlay opacity)      | 0.55            | Clear mask visibility while keeping original visible            |
 | Min pixels for class inclusion | 500             | Avoid marking tiny class appearances — need real representation |
 | Fixed seed for samples         | `42 + class_id` | Reproducible selection across runs                              |
-| TTA                            | HFlip average   | Same as used during training, free +0.3% IoU boost              |
+| TTA                            | HFlip average   | Same as used during training eval, free ~+0.3% IoU boost        |
 
 ---
 
 ## Known Limitations
 
-1. **Ground Clutter & Logs**: These rare classes may still have weak predictions — they're the hardest even for Phase 5 (IoU ~0.265 and 0.298).
+1. **Ground Clutter & Logs**: Still the hardest classes — Phase 6 improved them (Logs ~0.315 TTA IoU, Ground Clutter ~0.272) but they remain challenging due to dataset scarcity.
 2. **Upload tab**: No ground-truth mask available — only pixel coverage is shown.
 3. **Load time**: Model loading takes ~30s on first start (DINOv2 downloads from torch.hub if not cached).
 4. **Dataset indexing**: ~15-30s on startup to scan all training/validation images.
+5. **Per-class IoU values in interface** reflect single-scale HFlip TTA (not Multi-Scale). The Multi-Scale TTA (0.5527) requires 8 passes and is too slow for interactive use.
 
 ---

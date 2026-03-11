@@ -1,0 +1,83 @@
+PHASE 6 — BOUNDARY-AWARE FINE-TUNING RESULTS
+================================================================================
+
+Configuration:
+  phase                         : Phase 6 — Boundary-Aware Fine-Tuning
+  backbone                      : dinov2_vitb14_reg (ViT-Base) — blocks 9-11 UNFROZEN
+  seg_head                      : UPerNet (PPM + multi-scale FPN)
+  loss                          : Focal (gamma=2.0, w=0.25) + Dice (w=0.55) + Boundary (w=0.20)
+  optimizer                     : AdamW (backbone_lr=4e-06, head_lr=0.0002, wd=1e-4)
+  lr_schedule                   : warmup(3ep) + CosineAnnealing, differential
+  batch_size                    : 2 (effective 4 with grad accum)
+  epochs                        : 30
+  image_size                    : 644x364
+  mixed_precision               : True
+  augmentations                 : HFlip, VFlip, MultiScale, Blur, ColorJitter, CLAHE
+  early_stopping                : 10
+  resume_from                   : Phase 5 best checkpoint (IoU=0.5294)
+  tta                           : Multi-Scale (0.9, 1.0, 1.1, 1.2) x HFlip — 8 passes
+  backbone_unfreeze             : Blocks 9-10-11 (last 3 of 12)
+  new_in_phase6                 : BoundaryLoss + multi-scale TTA
+  best_val_iou                  : 0.5368
+  best_epoch                    : 28
+  tta_iou                       : 0.5527
+  tta_dice                      : 0.7404
+  tta_acc                       : 0.8438
+  total_training_time_min       : 438.8
+================================================================================
+
+Best Val IoU:      0.5368 (Epoch 28)
+Final Val IoU:     0.5370
+Final Val Dice:    0.7271
+Final Val Acc:     0.8420
+
+Multi-Scale TTA Val IoU:   0.5527
+Multi-Scale TTA Val Dice:  0.7404
+Multi-Scale TTA Val Acc:   0.8438
+
+Phase 5 Best IoU:  0.5294
+Phase 6 Best IoU:  0.5368  (+0.74% over Phase 5)
+Phase 6 TTA IoU:   0.5527  (+2.17% TTA over Phase 5 TTA)
+Total Training Time: 438.8 min (7.3 hours)
+
+================================================================================
+NOTE: eval_metrics.txt was recovered from terminal log after a UnicodeEncodeError
+      that occurred in the original save_metrics() call. All values are exact
+      as printed during training. Dice/Accuracy are derived from IoU ratios;
+      per-class IoU recovery requires re-running model eval (see recover below).
+================================================================================
+
+Per-Epoch History:
+----------------------------------------------------------------------------------------------------------------------------------
+Ep   TrLoss    VaLoss    TrIoU     VaIoU       Gap       LR_bb       LR_head     Note
+----------------------------------------------------------------------------------------------------------------------------------
+1    0.185     0.176     0.562     0.5267      0.036     2.70e-06    1.30e-04    <-- NEW BEST
+2    0.186     0.177     0.562     0.5260      0.036     4.00e-06    2.00e-04    
+3    0.187     0.178     0.558     0.5230      0.035     4.00e-06    2.00e-04    
+4    0.187     0.179     0.555     0.5210      0.035     4.00e-06    2.00e-04    
+5    0.185     0.177     0.561     0.5250      0.036     3.90e-06    2.00e-04    
+6    0.186     0.177     0.562     0.5260      0.036     3.90e-06    1.90e-04    
+7    0.185     0.176     0.561     0.5260      0.036     3.80e-06    1.90e-04    
+8    0.186     0.176     0.564     0.5260      0.037     3.70e-06    1.80e-04    
+9    0.185     0.175     0.565     0.5277      0.037     3.50e-06    1.80e-04    <-- NEW BEST
+10   0.184     0.176     0.562     0.5250      0.037     3.40e-06    1.70e-04    
+11   0.184     0.175     0.563     0.5270      0.036     3.20e-06    1.60e-04    
+12   0.183     0.175     0.566     0.5288      0.037     3.00e-06    1.50e-04    <-- NEW BEST
+13   0.182     0.174     0.566     0.5306      0.035     2.80e-06    1.40e-04    <-- NEW BEST
+14   0.182     0.174     0.566     0.5308      0.035     2.60e-06    1.30e-04    <-- NEW BEST
+15   0.181     0.174     0.568     0.5317      0.037     2.30e-06    1.20e-04    <-- NEW BEST
+16   0.181     0.173     0.566     0.5310      0.036     2.10e-06    1.10e-04    
+17   0.181     0.173     0.569     0.5331      0.036     1.90e-06    9.40e-05    <-- NEW BEST
+18   0.181     0.172     0.569     0.5335      0.035     1.70e-06    8.30e-05    <-- NEW BEST
+19   0.181     0.172     0.570     0.5330      0.037     1.40e-06    7.10e-05    
+20   0.179     0.172     0.571     0.5350      0.036     1.20e-06    6.00e-05    <-- NEW BEST
+21   0.179     0.172     0.572     0.5350      0.037     1.00e-06    5.00e-05    
+22   0.179     0.171     0.572     0.5353      0.037     8.10e-07    4.00e-05    <-- NEW BEST
+23   0.179     0.171     0.572     0.5350      0.037     6.30e-07    3.10e-05    
+24   0.178     0.171     0.572     0.5355      0.036     4.70e-07    2.30e-05    <-- NEW BEST
+25   0.178     0.171     0.573     0.5360      0.037     3.30e-07    1.60e-05    <-- NEW BEST
+26   0.178     0.171     0.574     0.5361      0.038     2.10e-07    1.10e-05    <-- NEW BEST
+27   0.177     0.171     0.573     0.5364      0.037     1.20e-07    6.00e-06    <-- NEW BEST
+28   0.177     0.171     0.575     0.5368      0.039     5.40e-08    2.70e-06    <-- BEST ⭐
+29   0.178     0.171     0.574     0.5368      0.038     1.40e-08    6.80e-07    
+30   0.178     0.171     0.575     0.5370      0.039     0.00e+00    0.00e+00    <-- BEST ⭐
