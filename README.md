@@ -1,7 +1,7 @@
 # 🏜️ Offroad Semantic Scene Segmentation — Ignitia Hackathon
 
 > **Duality AI × Ignitia Hackathon** | Pixel-level semantic segmentation of synthetic offroad desert environments.  
-> Built with **DINOv2 + UPerNet** | Achieved **IoU 0.5169 (TTA)** — a **73.9% improvement** over the baseline across 4 training phases.
+> Built with **DINOv2 + UPerNet** | Achieved **Multi-Scale TTA IoU 0.5527** — an **86.0% improvement** across 6 training phases.
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue.svg)](https://python.org)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.10-red.svg)](https://pytorch.org)
@@ -18,15 +18,16 @@
 - [Project Structure](#-project-structure)
 - [Training Scripts](#-training-scripts)
 - [Quick Start](#-quick-start)
+- [How to Reproduce](#-how-to-reproduce)
 - [Phase 1 — Baseline](#-phase-1--baseline-training)
 - [Phase 2 — Improved Training](#-phase-2--improved-training)
 - [Phase 3 — Advanced Training](#-phase-3--advanced-training)
 - [Phase 4 — Mastery Training](#-phase-4--mastery-training)
 - [Phase 5 — Controlled Fine-Tuning](#-phase-5--controlled-fine-tuning)
-- [Four-Phase Comparison](#-four-phase-comparison)
+- [Phase 6 — Boundary-Aware Fine-Tuning](#-phase-6--boundary-aware-fine-tuning-best)
+- [Six-Phase Comparison](#-six-phase-comparison)
 - [Per-Class IoU Journey](#-per-class-iou-journey)
 - [Technical Deep Dive](#-technical-deep-dive)
-- [How to Reproduce](#-how-to-reproduce)
 
 ---
 
@@ -163,8 +164,16 @@ offroad-seg-hackathon-duality-ai/
 │       ├── history.json                 # Machine-readable metrics (+ TTA)
 │       ├── best_model.pth               # Best val IoU (0.5294)
 │       └── final_model.pth              # Ep 30 weights
-│   └── PHASE_6_BOUNDARY/               # ⭐ Phase 6 — Boundary-Aware (READY TO RUN)
-│       └── (outputs will appear here after training)
+│   └── PHASE_6_BOUNDARY/               # ⭐ Phase 6 — Boundary-Aware (COMPLETED)
+│       ├── 00_phase6_log.md             # Detailed Phase 6 report
+│       ├── all_metrics_curves.png       # Loss/IoU curves across 30 epochs
+│       ├── val_iou_progress.png         # Val IoU climb to 0.537
+│       ├── lr_schedule.png             # Differential LR (bb 4e-6, head 2e-4)
+│       ├── overfit_gap.png             # Max gap 0.039 — zero overfitting
+│       ├── evaluation_metrics.txt      # Full 30-epoch table (UTF-8)
+│       ├── history.json                # Machine-readable metrics
+│       ├── best_model.pth              # Best checkpoint (IoU=0.5368, Ep 28)
+│       └── final_model.pth             # Ep 30 weights
 │
 ├── TESTING_INTERFACE/                    # 🔬 Gradio visual testing dashboard
 │   ├── app.py                           # Visual model tester (class picker + upload + metrics)
@@ -180,12 +189,122 @@ offroad-seg-hackathon-duality-ai/
 │   └── specs_result.json               # Saved spec results
 │
 ├── ENV_SETUP/                            # Environment setup automation
-│   ├── setup_env.bat                    # Windows setup script
-│   └── setup_env.sh                     # Linux/macOS setup script
+│   ├── setup_env.bat                    # Windows one-command setup (dirs + dataset guide + venv)
+│   ├── setup_env.sh                     # Linux/macOS one-command setup
+│   └── project_management.md           # Project governance and file rules
 │
-├── requirements.txt                      # Python dependencies
+├── REPRODUCE.md                          # 📖 Full step-by-step reproduction guide (start here!)
+├── requirements.txt                      # Python dependencies (PyTorch + CUDA 12.6)
 └── README.md                             # ← You are here
 ```
+
+---
+
+## 🚀 Quick Start
+
+> **New here? This is where to start.** Three commands is all it takes to get from zero to a running environment.
+
+### Step 1 — Clone the repo
+
+```bash
+git clone https://github.com/Daksh-M-Coder/offroad-seg-hackathon-duality-ai.git
+cd offroad-seg-hackathon-duality-ai
+```
+
+### Step 2 — Run the setup script
+
+The setup script does **everything** for you in one go:
+- Creates all necessary folders
+- Guides you to place the dataset at 3 checkpoints (see below)
+- Creates a Python virtual environment (`venv/`)
+- Installs PyTorch + CUDA 12.6 + all ML libraries
+- Verifies your GPU and CUDA are working
+
+```bash
+# Windows (run from project root in Command Prompt):
+ENV_SETUP\setup_env.bat
+
+# Linux / macOS (run from project root in Terminal):
+chmod +x ENV_SETUP/setup_env.sh && ./ENV_SETUP/setup_env.sh
+```
+
+### 📦 The AUTO_DATA Checkpoint System
+
+When the setup script runs, it will **pause 3 times** to wait for you to manually place each dataset package. Each pause shows a clearly labelled box:
+
+```
+╔══════════════════════════════════════════════════════════╗
+║               [AUTO_DATA_1] CHECKPOINT                  ║
+║           Training Dataset Placement Required           ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+| Marker | What to do |
+|---|---|
+| `[AUTO_DATA_1]` | Unzip `Offroad_Segmentation_Training_Dataset.zip` → place inside `DATASET/Offroad_Segmentation_Training_Dataset/` |
+| `[AUTO_DATA_2]` | Unzip `Offroad_Segmentation_testImages.zip` → place inside `DATASET/Offroad_Segmentation_testImages/` |
+| `[AUTO_DATA_3]` | Unzip `Offroad_Segmentation_Scripts.zip` → place inside `DATASET/Offroad_Segmentation_Scripts/` |
+
+Datasets are available from the **Duality AI Hackathon portal** (requires hackathon access). After each placement, press **Enter** and the script verifies your files automatically.
+
+### Step 3 — Activate and train
+
+```bash
+# Windows
+venv\Scripts\activate.bat
+python TRAINING_SCRIPTS\train_phase1_baseline.py
+
+# Linux/macOS
+source venv/bin/activate
+python TRAINING_SCRIPTS/train_phase1_baseline.py
+```
+
+> **Want the full step-by-step guide (Phase 1 → Phase 6)?** See **[REPRODUCE.md](REPRODUCE.md)** — it covers every detail including expected outputs, times, and troubleshooting.
+
+---
+
+## 🔁 How to Reproduce
+
+This project is fully reproducible. Every result in this README was generated from the training scripts in this repository on a single GPU (RTX 3050 6GB). Here's what you need to know:
+
+### Requirements
+
+| | Minimum | What We Used |
+|---|---|---|
+| **Python** | 3.10+ | **3.11.9** |
+| **GPU** | 6 GB VRAM (NVIDIA) | **RTX 3050 6 GB Laptop** |
+| **CUDA** | 11.8 | **12.6** |
+| **RAM** | 8 GB | **16 GB** |
+| **Disk** | 10 GB | **20 GB** |
+| **Training time** | — | **~28 hrs total (6 phases)** |
+
+### Phase Training Order
+
+Phases must be run **in order** — each phase's best checkpoint is the starting point for the next.
+
+| Phase | Script | IoU | Notes |
+|---|---|---|---|
+| 1 | `train_phase1_baseline.py` | 0.2971 | Starting point |
+| 2 | `train_phase2_improved.py` | 0.4036 | AdamW + augmentations |
+| 3 | `train_phase3_advanced.py` | 0.5161 | DINOv2 ViT-Base + UPerNet |
+| 4 | `train_phase4_mastery.py` | 0.5169 (TTA) | Multi-scale; early-stops at Ep 11 (normal) |
+| 5 | `train_phase5_controlled.py` | 0.5310 (TTA) | Unfreeze backbone blocks 10-11 |
+| **6** | `train_phase6_boundary.py` | **0.5527 (TTA)** | Blocks 9-11 + BoundaryLoss + 8-pass TTA |
+
+### After each phase — archive the model
+
+```bash
+# Example for Phase 6 (adjust IoU and phase number for each)
+cp "TRAINING AND PROGRESS/PHASE_6_BOUNDARY/best_model.pth" "MODELS/phase6_best_model_iou0.5368.pth"
+```
+
+### Full reproduction guide
+
+📖 **[REPRODUCE.md](REPRODUCE.md)** contains the complete, newbie-friendly walkthrough:
+- Exact commands for every step
+- What to expect during each training run (epoch-by-epoch)
+- Troubleshooting for 8 common issues
+- File naming and project management rules
 
 ---
 
