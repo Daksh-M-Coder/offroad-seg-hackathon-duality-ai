@@ -1047,17 +1047,17 @@ Phase 5 → Phase 6 (+2.17% TTA IoU — +4.08% without TTA vs TTA):
 
 
 | Class              | Phase 2 | Phase 3 | Phase 4 | Phase 5 (TTA) | Phase 6 (TTA) | P2→P6 Change | What Helped                              |
-| ------------------ | :-----: | :-----: | :-----: | :-----------: | :----------: | ---------------------------------------- |
-| **Sky**            |  0.947  |  0.969  |  0.968  |   0.970   | **~0.972** |    +2.6%     | Saturated                                  |
-| **Trees**          |  0.503  |  0.628  |  0.630  |   0.643   | **~0.655** |    +30.2%    | Backbone adaptation + edge precision       |
-| **Dry Grass**      |  0.481  |  0.589  |  0.589  |   0.599   | **~0.611** |    +27.0%    | Higher resolution + scale TTA              |
-| **Landscape**      |  0.361  |  0.546  |  0.550  |   0.556   | **~0.567** |    +57.1%    | PPM global context + multi-scale TTA       |
-| **Background**     |  0.452  |  0.519  |  0.515  |   0.529   | **~0.540** |    +19.5%    | Better features + boundary precision       |
-| **Lush Bushes**    |  0.413  |  0.517  |  0.517  |   0.532   | **~0.543** |    +31.5%    | 768-dim + Dice + boundary loss             |
-| **Dry Bushes**     |  0.279  |  0.370  |  0.438  |   0.453   | **~0.462** |    +65.6%    | Loss rebalance + boundary precision        |
-| **Rocks**          |  0.134  |  0.222  |  0.318  |   0.340   | **~0.358** |   +167.2%    | Boundary loss + multi-scale TTA (1.2×)     |
-| **Ground Clutter** |  0.076  |  0.116  |  0.254  |   0.265   | **~0.272** |   +257.9%    | Dice focus + boundary edges + TTA          |
-| **Logs**           |  0.052  |  0.252  |  0.251  |   0.298   | **~0.315** |   +505.8%    | Block 9 shape features + multi-scale TTA   |
+| ------------------ | :-----: | :-----: | :-----: | :-----------: | :-----------: | ------------ | ---------------------------------------- |
+| **Sky**            |  0.947  |  0.969  |  0.968  |     0.970     |  **~0.972**   | +2.6%        | Saturated                                |
+| **Trees**          |  0.503  |  0.628  |  0.630  |     0.643     |  **~0.655**   | +30.2%       | Backbone adaptation + edge precision     |
+| **Dry Grass**      |  0.481  |  0.589  |  0.589  |     0.599     |  **~0.611**   | +27.0%       | Higher resolution + scale TTA            |
+| **Landscape**      |  0.361  |  0.546  |  0.550  |     0.556     |  **~0.567**   | +57.1%       | PPM global context + multi-scale TTA     |
+| **Background**     |  0.452  |  0.519  |  0.515  |     0.529     |  **~0.540**   | +19.5%       | Better features + boundary precision     |
+| **Lush Bushes**    |  0.413  |  0.517  |  0.517  |     0.532     |  **~0.543**   | +31.5%       | 768-dim + Dice + boundary loss           |
+| **Dry Bushes**     |  0.279  |  0.370  |  0.438  |     0.453     |  **~0.462**   | +65.6%       | Loss rebalance + boundary precision      |
+| **Rocks**          |  0.134  |  0.222  |  0.318  |     0.340     |  **~0.358**   | +167.2%      | Boundary loss + multi-scale TTA (1.2×)   |
+| **Ground Clutter** |  0.076  |  0.116  |  0.254  |     0.265     |  **~0.272**   | +257.9%      | Dice focus + boundary edges + TTA        |
+| **Logs**           |  0.052  |  0.252  |  0.251  |     0.298     |  **~0.315**   | +505.8%      | Block 9 shape features + multi-scale TTA |
 
 ### Key Breakthroughs (Across All 5 Phases)
 
