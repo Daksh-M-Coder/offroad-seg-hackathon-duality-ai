@@ -925,6 +925,8 @@ Phase 5 → Phase 6 (+2.17% TTA IoU — +4.08% without TTA vs TTA):
 
 ## 🎯 Per-Class IoU Journey
 
+
+
 | Class              | Phase 2 | Phase 3 | Phase 4 | Phase 5 (TTA) | Phase 6 (TTA) | P2→P6 Change | What Helped                              |
 | ------------------ | :-----: | :-----: | :-----: | :-----------: | :----------: | ---------------------------------------- |
 | **Sky**            |  0.947  |  0.969  |  0.968  |   0.970   | **~0.972** |    +2.6%     | Saturated                                  |
