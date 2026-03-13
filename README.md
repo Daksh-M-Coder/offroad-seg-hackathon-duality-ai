@@ -179,8 +179,8 @@ offroad-seg-hackathon-duality-ai/
 │   ├── app.py                           # Visual model tester (class picker + upload + metrics)
 │   ├── SCRIPT_EXPLAINED.md             # Interface documentation
 │   ├── dataset_index_cache.json        # Auto-built class→file index
-│   ├── IMGS/                            # Saved PNG images per result (raw/overlay/mask)
-│   └── RESULTS/                         # Timestamped .md reports with embedded images
+│   ├── IMGS/                            # Saved PNG images per result (raw/overlay/mask/chart)
+│   └── RESULTS/                         # Timestamped .md reports with Markdown tables & embedded charts
 │
 ├── SYSTEM_CHECK/                         # Hardware verification scripts
 │   ├── system_specs.py                  # Full system spec checker

@@ -109,10 +109,11 @@ A static reference panel showing **which colour = which class** for all 10 categ
 
 ### Metrics Text Panel
 
-Shows:
+Shows a beautifully formatted **Markdown Table** containing:
 
 - Mean IoU, Pixel Accuracy (when GT available)
 - Per-class table: IoU, Dice, Predicted pixels, GT pixels
+- Easily copy-pasteable into reports.
 
 ---
 
@@ -135,18 +136,19 @@ Shows:
 
 ## Result Logging
 
-Every single prediction (no matter which tab) automatically saves a Markdown file and 3 images:
+Every single prediction (no matter which tab) automatically saves a Markdown file and **4 images**:
 
 ```
 TESTING_INTERFACE/
 ├── RESULTS/
-│   ├── 0001_20260310_011500.md     ← metrics + embedded images
+│   ├── 0001_20260310_011500.md     ← metrics + embedded images + chart
 │   ├── 0002_20260310_011523.md
 │   └── ...
 └── IMGS/
     ├── 0001_20260310_011500_raw.png
     ├── 0001_20260310_011500_overlay.png
     ├── 0001_20260310_011500_mask.png
+    ├── 0001_20260310_011500_chart.png   ← Per-class IoU bar chart
     └── ...
 ```
 
@@ -161,7 +163,7 @@ Each `.md` result file contains:
 - Device (CUDA/CPU)
 - Metrics table (IoU, Dice, pixel counts per class)
 - Timestamp
-- **Embedded images** (raw, overlay, mask) as a comparison table
+- **Embedded images** (raw, overlay, mask, **and the IoU chart**) as a visual summary
 
 ---
 

@@ -429,6 +429,7 @@ def _save_result_md(
     img_files: dict,   # {"raw": path, "overlay": path, "mask": path}
     seq: int,
     ts: str,
+    chart_path: str
 ):
     fname = f"{seq:04d}_{ts}.md"
     path  = os.path.join(RESULTS_DIR, fname)
@@ -453,6 +454,9 @@ def _save_result_md(
         f"| 📷 Original | 🎨 Segmentation Overlay | 🗺️ Prediction Mask |",
         f"|---|---|---|",
         f"| ![]({_rel(img_files['raw'])}) | ![]({_rel(img_files['overlay'])}) | ![]({_rel(img_files['mask'])}) |",
+        f"",
+        f"### Per-Class IoU Chart",
+        f"![]({_rel(chart_path)})",
         f"",
     ]
 
@@ -552,7 +556,7 @@ def _run_inference(img_path: str, mask_path: str | None, source_label: str):
     # ── Metrics figure ──
     metrics_fig = _make_metrics_figure(ious)
 
-    # ── Metrics text ──
+    # ── Metrics text (Formatted as Markdown Table) ──
     def _iou_str(v):
         return f"{v:.4f}" if not (isinstance(v, float) and np.isnan(v)) else "absent"
 
@@ -561,24 +565,24 @@ def _run_inference(img_path: str, mask_path: str | None, source_label: str):
             f"✅  Mean IoU    : {mean_iou:.4f}",
             f"✅  Pixel Acc  : {px_acc*100:.2f}%",
             f"",
-            f"{'Class':<20} {'IoU':>7} {'Dice':>7} {'PredPx':>9} {'GTPx':>9}",
-            "─" * 56,
+            f"| Class | IoU | Dice | PredPx | GTPx |",
+            f"|---|---|---|---|---|",
         ]
         for c in range(N_CLASSES):
             lines_m.append(
-                f"{CLASS_NAMES[c]:<20} {_iou_str(ious[c]):>7} {dices[c]:>7.4f} {pred_px[c]:>9,} {gt_px[c]:>9,}"
+                f"| **{CLASS_NAMES[c]}** | {_iou_str(ious[c])} | {dices[c]:.4f} | {pred_px[c]:,} | {gt_px[c]:,} |"
             )
     else:
         total_px = IMG_W * IMG_H
         lines_m = [
             "ℹ️  No ground-truth mask available — prediction coverage shown",
             "",
-            f"{'Class':<20} {'Pred Pixels':>12} {'% Area':>8}",
-            "─" * 42,
+            f"| Class | Pred Pixels | % Area |",
+            f"|---|---|---|",
         ]
         for c in range(N_CLASSES):
             lines_m.append(
-                f"{CLASS_NAMES[c]:<20} {pred_px[c]:>12,} {pred_px[c]/total_px*100:>7.1f}%"
+                f"| **{CLASS_NAMES[c]}** | {pred_px[c]:,} | {pred_px[c]/total_px*100:.1f}% |"
             )
 
     metrics_text = "\n".join(lines_m)
@@ -591,19 +595,22 @@ def _run_inference(img_path: str, mask_path: str | None, source_label: str):
     raw_img_path     = os.path.join(IMGS_DIR, f"{prefix}_raw.png")
     overlay_img_path = os.path.join(IMGS_DIR, f"{prefix}_overlay.png")
     mask_img_path    = os.path.join(IMGS_DIR, f"{prefix}_mask.png")
+    chart_img_path   = os.path.join(IMGS_DIR, f"{prefix}_chart.png")
 
     cv2.imwrite(raw_img_path,     cv2.cvtColor(original_display, cv2.COLOR_RGB2BGR))
     cv2.imwrite(overlay_img_path, cv2.cvtColor(overlay,          cv2.COLOR_RGB2BGR))
     cv2.imwrite(mask_img_path,    cv2.cvtColor(mask_rgb,         cv2.COLOR_RGB2BGR))
+    metrics_fig.savefig(chart_img_path, bbox_inches='tight', dpi=100)
 
     img_files = {"raw": raw_img_path, "overlay": overlay_img_path, "mask": mask_img_path}
 
     # ── Save result MD ──
     md_fname = _save_result_md(
         source_label, img_fname, mean_iou, px_acc,
-        ious, dices, pred_px, gt_px, has_gt, img_files, seq, ts
+        ious, dices, pred_px, gt_px, has_gt, img_files, seq, ts,
+        chart_path=chart_img_path
     )
-    result_info = f"💾 Saved → RESULTS/{md_fname}  |  IMGS/{prefix}_{{raw,overlay,mask}}.png"
+    result_info = f"💾 Saved → RESULTS/{md_fname}  |  IMGS/{prefix}_{{raw,overlay,mask,chart}}.png"
 
     return (
         Image.fromarray(original_display),
